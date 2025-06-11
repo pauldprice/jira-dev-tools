@@ -223,6 +223,12 @@ export class HtmlGenerator {
             letter-spacing: 0.5px;
         }
         
+        .summary-table th:first-child,
+        .summary-table td:first-child {
+            white-space: nowrap;
+            min-width: 80px;
+        }
+        
         .summary-table tr:nth-child(even) {
             background: #fafafa;
         }
