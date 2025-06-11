@@ -529,7 +529,7 @@ export class HtmlGenerator {
             <h3 style="margin-top: 2em;">Quick Reference</h3>
             <ul style="line-height: 1.8;">
                 <li><strong>Total Changes:</strong> ${data.stats.totalTickets} tickets, ${data.stats.totalCommits} commits</li>
-                <li><strong>Risk Level:</strong> ${this.assessRiskLevel(data)}</li>
+                <li><strong>Risk Level:</strong> ${this.getRiskLevelSummary(data)}</li>
                 <li><strong>Primary Focus:</strong> ${this.getPrimaryFocus(data)}</li>
             </ul>
         </section>
@@ -537,11 +537,100 @@ export class HtmlGenerator {
   }
 
   private static getPrimaryFocus(data: ReleaseNotesData): string {
-    const { bugFixes, newFeatures, apiChanges } = data.stats;
-    if (bugFixes > newFeatures && bugFixes > apiChanges) return 'Stability Improvements';
-    if (newFeatures > bugFixes) return 'New Functionality';
-    if (apiChanges > 0) return 'Integration Updates';
-    return 'General Maintenance';
+    // Analyze all ticket descriptions to determine primary focus
+    const allTickets = [
+      ...data.categories.bugFixes,
+      ...data.categories.newFeatures,
+      ...data.categories.apiChanges,
+      ...data.categories.uiUpdates,
+      ...data.categories.refactoring,
+      ...data.categories.other
+    ];
+
+    // Look for common themes in descriptions
+    const themes = {
+      security: 0,
+      performance: 0,
+      userExperience: 0,
+      dataHandling: 0,
+      integration: 0,
+      stability: 0,
+      features: 0
+    };
+
+    allTickets.forEach(ticket => {
+      const text = `${ticket.title} ${ticket.description || ''}`.toLowerCase();
+      
+      if (text.includes('security') || text.includes('auth') || text.includes('permission') || text.includes('access')) themes.security++;
+      if (text.includes('performance') || text.includes('speed') || text.includes('optimize') || text.includes('cache')) themes.performance++;
+      if (text.includes('ui') || text.includes('ux') || text.includes('user experience') || text.includes('interface') || text.includes('design')) themes.userExperience++;
+      if (text.includes('data') || text.includes('database') || text.includes('migration') || text.includes('storage')) themes.dataHandling++;
+      if (text.includes('api') || text.includes('integration') || text.includes('webhook') || text.includes('endpoint')) themes.integration++;
+      if (text.includes('fix') || text.includes('bug') || text.includes('error') || text.includes('crash')) themes.stability++;
+      if (text.includes('feature') || text.includes('new') || text.includes('add') || text.includes('implement')) themes.features++;
+    });
+
+    // Find the dominant theme
+    const sortedThemes = Object.entries(themes).sort((a, b) => b[1] - a[1]);
+    const [topTheme, topCount] = sortedThemes[0];
+    const [secondTheme, secondCount] = sortedThemes[1];
+
+    // Generate a more specific focus based on the analysis
+    if (topCount === 0) {
+      return 'General Maintenance';
+    }
+
+    const focusMap: Record<string, string> = {
+      security: 'Security & Access Control',
+      performance: 'Performance Optimization',
+      userExperience: 'User Experience Improvements',
+      dataHandling: 'Data Management & Processing',
+      integration: 'System Integration',
+      stability: 'Stability & Bug Fixes',
+      features: 'New Feature Development'
+    };
+
+    let focus = focusMap[topTheme];
+    
+    // If second theme is close in count, mention both
+    if (secondCount > 0 && secondCount >= topCount * 0.7) {
+      focus += ` & ${focusMap[secondTheme]}`;
+    }
+
+    return focus;
+  }
+
+  private static getRiskLevelSummary(data: ReleaseNotesData): string {
+    // Count tickets by risk level
+    const riskCounts = { high: 0, medium: 0, low: 0 };
+    
+    const allTickets = [
+      ...data.categories.bugFixes.map(t => ({ ...t, category: 'Bug Fix' })),
+      ...data.categories.newFeatures.map(t => ({ ...t, category: 'Feature' })),
+      ...data.categories.apiChanges.map(t => ({ ...t, category: 'API' })),
+      ...data.categories.uiUpdates.map(t => ({ ...t, category: 'UI' })),
+      ...data.categories.refactoring.map(t => ({ ...t, category: 'Refactor' })),
+      ...data.categories.other.map(t => ({ ...t, category: 'Other' })),
+    ];
+
+    allTickets.forEach(ticket => {
+      // Apply same risk assessment logic as assessTicketRisk
+      if (ticket.category === 'API' || ticket.commits.length > 5) {
+        riskCounts.high++;
+      } else if (ticket.category === 'Bug Fix' && ticket.commits.length > 3) {
+        riskCounts.medium++;
+      } else {
+        riskCounts.low++;
+      }
+    });
+
+    // Build summary string
+    const parts = [];
+    if (riskCounts.high > 0) parts.push(`${riskCounts.high} High`);
+    if (riskCounts.medium > 0) parts.push(`${riskCounts.medium} Medium`);
+    if (riskCounts.low > 0) parts.push(`${riskCounts.low} Low`);
+    
+    return parts.join(', ');
   }
 
   private static assessRiskLevel(data: ReleaseNotesData): string {
