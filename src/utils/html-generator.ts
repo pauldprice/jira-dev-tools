@@ -32,6 +32,7 @@ export interface ReleaseNotesData {
   commits: CommitInfo[];
   primaryFocus?: string;
   jiraBaseUrl?: string;
+  repoUrl?: string;
 }
 
 export interface TicketInfo {
@@ -53,10 +54,12 @@ export interface CommitInfo {
 
 export class HtmlGenerator {
   private static jiraBaseUrl: string = '';
+  private static repoUrl: string = '';
   
   static generateReleaseNotes(data: ReleaseNotesData): string {
     // Store JIRA base URL for use in ticket link generation
     this.jiraBaseUrl = data.jiraBaseUrl || process.env.JIRA_BASE_URL || '';
+    this.repoUrl = data.repoUrl || '';
     
     return `<!DOCTYPE html>
 <html lang="en">
@@ -838,9 +841,11 @@ export class HtmlGenerator {
                     ${data.commits.slice(0, 50).map(commit => {
                         const ticketMatch = commit.message.match(/([A-Z]+-\d+)/);
                         const ticketId = ticketMatch ? ticketMatch[1] : null;
+                        const shortHash = commit.hash.substring(0, 8);
+                        const commitLink = this.getCommitUrl(commit.hash);
                         return `
                             <tr>
-                                <td class="commit-hash">${commit.hash.substring(0, 8)}</td>
+                                <td class="commit-hash">${commitLink ? `<a href="${commitLink}" target="_blank" style="color: #2c3e50;">${shortHash}</a>` : shortHash}</td>
                                 <td>${commit.message}</td>
                                 <td>${ticketId ? `<a href="#${ticketId}" style="color: #2c3e50;">${ticketId}</a>` : '-'}</td>
                             </tr>
@@ -857,5 +862,38 @@ export class HtmlGenerator {
     // Use stored JIRA base URL or fallback
     const jiraBaseUrl = this.jiraBaseUrl || process.env.JIRA_BASE_URL || 'https://jira.example.com';
     return `${jiraBaseUrl}/browse/${ticketId}`;
+  }
+
+  private static getCommitUrl(hash: string): string {
+    if (!this.repoUrl) return '';
+    
+    // Parse git remote URL to construct web URL
+    // Handle both SSH and HTTPS formats
+    let webUrl = this.repoUrl;
+    
+    // SSH format: git@bitbucket.org:GatherOurMemories/webapp.git
+    if (webUrl.startsWith('git@')) {
+      webUrl = webUrl
+        .replace('git@', 'https://')
+        .replace('.org:', '.org/')
+        .replace('.com:', '.com/')
+        .replace(/\.git$/, '');
+    }
+    // HTTPS format: https://bitbucket.org/GatherOurMemories/webapp.git
+    else if (webUrl.startsWith('https://')) {
+      webUrl = webUrl.replace(/\.git$/, '');
+    }
+    
+    // Construct commit URL based on provider
+    if (webUrl.includes('github.com')) {
+      return `${webUrl}/commit/${hash}`;
+    } else if (webUrl.includes('bitbucket.org')) {
+      return `${webUrl}/commits/${hash}`;
+    } else if (webUrl.includes('gitlab.com')) {
+      return `${webUrl}/-/commit/${hash}`;
+    }
+    
+    // Generic fallback
+    return `${webUrl}/commit/${hash}`;
   }
 }

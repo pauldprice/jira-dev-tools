@@ -666,6 +666,19 @@ async function stepGenerateNotes(config: ReleaseNotesConfig): Promise<void> {
   const analysisFile = path.join(config.workDir, 'code_analysis.json');
   const codeAnalysis = FileSystem.exists(analysisFile) ? await FileSystem.readJSON(analysisFile) : {};
 
+  // Get repository URL
+  let repoUrl = '';
+  try {
+    const git: SimpleGit = simpleGit(config.repoPath);
+    const remotes = await git.getRemotes(true);
+    const origin = remotes.find(r => r.name === 'origin');
+    if (origin && origin.refs.fetch) {
+      repoUrl = origin.refs.fetch;
+    }
+  } catch (error) {
+    logger.debug('Could not get repository URL');
+  }
+
 
   // Build commit info
   const allCommits: CommitInfo[] = commits.map(line => {
@@ -833,7 +846,8 @@ async function stepGenerateNotes(config: ReleaseNotesConfig): Promise<void> {
     ],
     commits: allCommits,
     primaryFocus,
-    jiraBaseUrl: appConfig.get('JIRA_BASE_URL')
+    jiraBaseUrl: appConfig.get('JIRA_BASE_URL'),
+    repoUrl
   };
 
   // Generate HTML optimized for PDF output
