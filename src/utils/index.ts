@@ -5,3 +5,6 @@ export * from './http-client';
 export * from './fs-utils';
 export * from './jira-formatter';
 export * from './html-generator';
+export * from './jira-client';
+export * from './git-diff';
+export * from './claude-client';

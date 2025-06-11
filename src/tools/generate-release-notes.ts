@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
-import { logger, progress, FileSystem, config as appConfig, HtmlGenerator } from '../utils';
-import type { ReleaseNotesData, TicketInfo, CommitInfo } from '../utils';
+import { logger, progress, FileSystem, config as appConfig, HtmlGenerator, fetchJiraTicket, getTicketCodeDiff, createClaudeClient } from '../utils';
+import type { ReleaseNotesData, TicketInfo, CommitInfo, JiraCredentials } from '../utils';
 import simpleGit, { SimpleGit } from 'simple-git';
 import * as path from 'path';
 import { format } from 'date-fns';
@@ -226,7 +226,7 @@ async function saveProgress(config: ReleaseNotesConfig, step: string): Promise<v
 }
 
 // Step implementations (placeholders for now)
-async function stepFetchCommits(git: SimpleGit, config: ReleaseNotesConfig): Promise<void> {
+async function stepFetchCommits(_git: SimpleGit, config: ReleaseNotesConfig): Promise<void> {
   logger.header('Step 1: Fetching Commits');
   
   const outputFile = path.join(config.workDir, 'commits.txt');
@@ -239,14 +239,15 @@ async function stepFetchCommits(git: SimpleGit, config: ReleaseNotesConfig): Pro
   progress.start(`Fetching commits between ${config.targetBranch} and ${config.sourceBranch}`);
   
   try {
-    // Get commits that are in source but not in target
-    const log = await git.log([
-      `${config.targetBranch}..${config.sourceBranch}`,
-      '--oneline',
-      '--no-merges'
-    ]);
+    // Use git command directly for more reliable results
+    const { execSync } = await import('child_process');
+    const gitCommand = `git log ${config.targetBranch}..${config.sourceBranch} --oneline --no-merges`;
+    const gitOutput = execSync(gitCommand, { 
+      cwd: config.repoPath,
+      encoding: 'utf-8'
+    }).trim();
     
-    const commits = log.all.map(commit => `${commit.hash.substring(0, 7)} ${commit.message}`);
+    const commits = gitOutput.split('\n').filter(line => line.trim());
     await FileSystem.writeFile(outputFile, commits.join('\n'));
     
     progress.succeed(`Found ${commits.length} commits`);
@@ -404,27 +405,30 @@ async function stepFetchTicketDetails(config: ReleaseNotesConfig): Promise<void>
 
   progress.start(`Fetching details for ${total} tickets...`);
 
-  // Import fetch-jira functionality
-  const { execSync } = await import('child_process');
-  const toolboxPath = path.resolve(__dirname, '../../..');
-
   for (const ticket of tickets) {
     current++;
     progress.update(`Fetching ${current}/${total}: ${ticket}`);
 
     try {
-      // Use our fetch-jira tool via command line
-      const result = execSync(
-        `cd "${toolboxPath}" && ./toolbox fetch-jira ${ticket} --format llm`,
-        { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] }
+      // Use the internal Jira client directly
+      const ticketData = await fetchJiraTicket(
+        ticket, 
+        jiraConfig as JiraCredentials,
+        { 
+          includeComments: true,
+          includeHistory: false,
+          format: 'llm'
+        }
       );
-
-      const ticketData = JSON.parse(result);
+      
       ticketDetails[ticket] = ticketData;
       successful++;
-    } catch (error) {
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.errorMessages?.join(', ') || 
+                         error.message || 
+                         'Unknown error';
       if (config.verbose) {
-        logger.debug(`Failed to fetch ${ticket}: ${error}`);
+        logger.warn(`Failed to fetch ${ticket}: ${errorMessage}`);
       }
     }
   }
@@ -434,10 +438,100 @@ async function stepFetchTicketDetails(config: ReleaseNotesConfig): Promise<void>
   progress.succeed(`Fetched details for ${successful}/${total} tickets`);
 }
 
-async function stepAnalyzeCode(_git: SimpleGit, _config: ReleaseNotesConfig): Promise<void> {
+async function stepAnalyzeCode(_git: SimpleGit, config: ReleaseNotesConfig): Promise<void> {
   logger.header('Step 5: Analyzing Code Changes');
-  logger.warn('AI analysis pending...');
-  // TODO: Implement Claude AI integration
+  
+  const ticketsFile = path.join(config.workDir, 'tickets.txt');
+  const detailsFile = path.join(config.workDir, 'ticket_details.json');
+  const outputFile = path.join(config.workDir, 'code_analysis.json');
+  
+  if (!FileSystem.exists(ticketsFile)) {
+    throw new Error('tickets.txt not found. Run extract step first.');
+  }
+  
+  if (FileSystem.exists(outputFile)) {
+    logger.info('Using cached code analysis');
+    return;
+  }
+
+  // Check if Claude is available
+  const claudeClient = createClaudeClient();
+  if (!claudeClient) {
+    logger.warn('Claude API not configured. Skipping AI analysis.');
+    logger.info('Set ANTHROPIC_API_KEY to enable AI-powered analysis.');
+    await FileSystem.writeJSON(outputFile, {});
+    return;
+  }
+
+  const tickets = (await FileSystem.readFile(ticketsFile)).split('\n').filter(Boolean);
+  const ticketDetails = FileSystem.exists(detailsFile) ? await FileSystem.readJSON(detailsFile) : {};
+  const codeAnalysis: Record<string, any> = {};
+  
+  const total = tickets.length;
+  let current = 0;
+  let successful = 0;
+
+  progress.start(`Analyzing code for ${total} tickets...`);
+
+  for (const ticket of tickets) {
+    current++;
+    progress.update(`Analyzing ${current}/${total}: ${ticket}`);
+
+    try {
+      // Get code diff for this ticket
+      const diff = await getTicketCodeDiff(config.repoPath, ticket, config.targetBranch);
+      
+      if (!diff) {
+        if (config.verbose) {
+          logger.debug(`No code diff found for ${ticket} - this ticket may not have commits in this branch`);
+        }
+        continue;
+      }
+
+      // Get Jira data if available
+      const jiraData = ticketDetails[ticket];
+      
+      // Analyze with Claude
+      const analysis = await claudeClient.analyzeCodeChanges(diff, jiraData);
+      
+      // Generate comprehensive summary
+      let finalSummary = analysis.summary;
+      if (jiraData) {
+        finalSummary = await claudeClient.generateTicketSummary(ticket, jiraData, analysis);
+      }
+
+      codeAnalysis[ticket] = {
+        diff: {
+          stats: diff.stats,
+          filesChanged: diff.files.map(f => ({
+            path: f.path,
+            changeType: f.changeType,
+            additions: f.additions,
+            deletions: f.deletions
+          }))
+        },
+        analysis: {
+          ...analysis,
+          summary: finalSummary
+        }
+      };
+      
+      successful++;
+    } catch (error: any) {
+      logger.debug(`Failed to analyze ${ticket}: ${error.message}`);
+    }
+  }
+
+  await FileSystem.writeJSON(outputFile, codeAnalysis);
+  
+  progress.succeed(`Analyzed ${successful}/${total} tickets`);
+  
+  if (successful < total) {
+    logger.info(`Some tickets could not be analyzed. This might be due to:
+  - No commits found for the ticket
+  - API rate limits
+  - Large diffs exceeding token limits`);
+  }
 }
 
 async function stepGenerateNotes(config: ReleaseNotesConfig): Promise<void> {
@@ -459,6 +553,10 @@ async function stepGenerateNotes(config: ReleaseNotesConfig): Promise<void> {
   const tickets = (await FileSystem.readFile(ticketsFile)).split('\n').filter(Boolean);
   const categories = await FileSystem.readJSON(categoriesFile);
   const ticketDetails = FileSystem.exists(detailsFile) ? await FileSystem.readJSON(detailsFile) : {};
+  
+  // Load code analysis if available
+  const analysisFile = path.join(config.workDir, 'code_analysis.json');
+  const codeAnalysis = FileSystem.exists(analysisFile) ? await FileSystem.readJSON(analysisFile) : {};
 
 
   // Build commit info
@@ -500,15 +598,33 @@ async function stepGenerateNotes(config: ReleaseNotesConfig): Promise<void> {
       const details = ticketDetails[ticketId];
       const ticketCommits = allCommits.filter(c => c.message.includes(ticketId));
 
+      // Get AI analysis if available
+      const analysis = codeAnalysis[ticketId]?.analysis;
+      
+      // Use AI-generated summary if available, otherwise fall back to Jira description
+      let description = details?.description;
+      if (analysis?.summary) {
+        description = analysis.summary;
+      }
+      
+      // Use AI-generated testing notes if available
+      let testingNotes = getTestingNotes(category);
+      if (analysis?.testingNotes && analysis.testingNotes.length > 0) {
+        testingNotes = analysis.testingNotes;
+      }
+      
+      // Include risks from AI analysis
+      const risks = analysis?.risks || [];
+
       const ticketInfo: TicketInfo = {
         id: ticketId,
         title: details?.title || ticketCommits[0]?.message || 'No title',
         status: details?.status,
         assignee: details?.assignee,
-        description: details?.description,
+        description,
         commits: ticketCommits,
-        testingNotes: getTestingNotes(category),
-        risks: []
+        testingNotes,
+        risks
       };
 
       categorizedTickets[mappedCategory].push(ticketInfo);
