@@ -54,10 +54,13 @@ The Gather Toolbox is a TypeScript-based CLI utility collection for development 
 - Gracefully handle missing configurations
 
 ### Testing
-- Run lint and typecheck before committing
+- Run TypeScript type checking: `npx tsc --noEmit`
+- Run linting: `npm run lint` (if configured)
 - Test with real repositories when working on git-related features
 - Verify Jira integration with actual tickets
 - Always test error cases and edge conditions
+- Test performance improvements by comparing before/after timings
+- Verify cached vs non-cached outputs are identical
 
 ## Important Patterns
 
@@ -129,8 +132,20 @@ The toolbox includes a comprehensive caching system to speed up development and 
 
 Cache is stored in `.toolbox_cache/` by default and can be managed via the cache command.
 
+## Testing Results
+
+### Cache Performance
+- First run (no cache): ~21 seconds
+- Second run (with cache): ~4.2 seconds
+- **5x speedup** with caching enabled
+
+### Known Issues
+- Bug: AI-generated testing notes can be incorrectly mapped to wrong tickets in cached runs
+- This appears to be a data structure issue where testing notes are not properly isolated per ticket
+
 ## Future Considerations
 
+- Fix the testing notes mapping bug in cached AI responses
 - Additional tool integrations planned
 - Performance optimizations for large repositories
 - Enhanced AI analysis capabilities
