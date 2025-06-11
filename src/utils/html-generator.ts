@@ -1,6 +1,8 @@
 /**
  * Optimized HTML template for release notes with PDF generation support
  */
+import * as fs from 'fs';
+import * as path from 'path';
 
 export interface ReleaseNotesData {
   title: string;
@@ -153,6 +155,16 @@ export class HtmlGenerator {
             align-items: center;
             page-break-after: always;
             text-align: center;
+            padding: 2em;
+        }
+        
+        .logo-container {
+            margin-bottom: 3em;
+        }
+        
+        .logo-container svg {
+            max-width: 300px;
+            height: auto;
         }
         
         .cover-title {
@@ -262,6 +274,26 @@ export class HtmlGenerator {
         }
         
         .ticket-id a:hover {
+            color: #2980b9;
+        }
+        
+        .toc {
+            text-align: left;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .toc div {
+            margin: 0.5em 0;
+            padding-left: 1em;
+        }
+        
+        .toc a {
+            color: #2c3e50;
+            font-weight: 500;
+        }
+        
+        .toc a:hover {
             color: #2980b9;
         }
         
@@ -526,8 +558,21 @@ export class HtmlGenerator {
   }
 
   private static generateCoverPage(data: ReleaseNotesData): string {
+    // Read the logo file and convert to base64 for embedding
+    const logoPath = path.join(__dirname, '../../assets/gatherLogo.svg');
+    let logoSvg = '';
+    try {
+      logoSvg = fs.readFileSync(logoPath, 'utf8');
+      // Remove width and height from SVG to make it responsive
+      logoSvg = logoSvg.replace(/width="\d+"/, 'width="300"')
+                       .replace(/height="\d+"/, 'height="265"');
+    } catch (error) {
+      // If logo not found, continue without it
+    }
+    
     return `
         <div class="cover-page">
+            ${logoSvg ? `<div class="logo-container">${logoSvg}</div>` : ''}
             <div class="cover-title">Release Notes</div>
             <div class="cover-subtitle">${data.version}</div>
             <div class="cover-meta">
@@ -565,7 +610,7 @@ export class HtmlGenerator {
     });
 
     return `
-        <section class="executive-summary" style="page-break-after: always;">
+        <section class="executive-summary" id="executive-summary" style="page-break-after: always;">
             <h1>Executive Summary</h1>
             
             <div class="summary-grid">
@@ -596,15 +641,15 @@ export class HtmlGenerator {
             </ul>
             
             <h2>Table of Contents</h2>
-            <ol style="line-height: 1.8;">
-                <li>Executive Summary (this page)</li>
-                <li>Change Summary Table</li>
-                ${data.categories.bugFixes.length > 0 ? '<li>Critical Bug Fixes</li>' : ''}
-                ${data.categories.newFeatures.length > 0 ? '<li>New Features</li>' : ''}
-                ${data.categories.apiChanges.length > 0 ? '<li>API Changes</li>' : ''}
-                ${(data.categories.uiUpdates.length + data.categories.refactoring.length + data.categories.other.length) > 0 ? '<li>Other Changes</li>' : ''}
-                <li>Appendix: Full Commit List</li>
-            </ol>
+            <div class="toc" style="line-height: 1.8;">
+                <div><a href="#executive-summary">Executive Summary (this page)</a></div>
+                <div><a href="#change-summary">Change Summary Table</a></div>
+                ${data.categories.bugFixes.length > 0 ? '<div><a href="#critical-bug-fixes">Critical Bug Fixes</a></div>' : ''}
+                ${data.categories.newFeatures.length > 0 ? '<div><a href="#new-features">New Features</a></div>' : ''}
+                ${data.categories.apiChanges.length > 0 ? '<div><a href="#api-changes">API Changes</a></div>' : ''}
+                ${(data.categories.uiUpdates.length + data.categories.refactoring.length + data.categories.other.length) > 0 ? '<div><a href="#other-changes">Other Changes</a></div>' : ''}
+                <div><a href="#appendix">Appendix: Full Commit List</a></div>
+            </div>
         </section>
     `;
   }
@@ -719,7 +764,7 @@ export class HtmlGenerator {
     ];
 
     return `
-        <section class="ticket-summary" style="padding: 2em;">
+        <section class="ticket-summary" id="change-summary" style="padding: 2em;">
             <h2>Change Summary</h2>
             <table class="summary-table">
                 <thead>
@@ -760,10 +805,10 @@ export class HtmlGenerator {
 
   private static generateTicketDetails(data: ReleaseNotesData): string {
     const sections = [
-      { title: '🐛 Critical Bug Fixes', tickets: data.categories.bugFixes },
-      { title: '✨ New Features', tickets: data.categories.newFeatures },
-      { title: '🔧 API Changes', tickets: data.categories.apiChanges },
-      { title: '📦 Other Changes', tickets: [...data.categories.uiUpdates, ...data.categories.refactoring, ...data.categories.other] },
+      { id: 'critical-bug-fixes', title: '🐛 Critical Bug Fixes', tickets: data.categories.bugFixes },
+      { id: 'new-features', title: '✨ New Features', tickets: data.categories.newFeatures },
+      { id: 'api-changes', title: '🔧 API Changes', tickets: data.categories.apiChanges },
+      { id: 'other-changes', title: '📦 Other Changes', tickets: [...data.categories.uiUpdates, ...data.categories.refactoring, ...data.categories.other] },
     ];
 
     return `
@@ -771,7 +816,7 @@ export class HtmlGenerator {
             ${sections
               .filter(section => section.tickets.length > 0)
               .map(section => `
-                <h2>${section.title}</h2>
+                <h2 id="${section.id}">${section.title}</h2>
                 ${section.tickets.map(ticket => this.generateCompactTicket(ticket)).join('')}
               `).join('')}
         </section>
@@ -882,7 +927,7 @@ export class HtmlGenerator {
 
   private static generateAppendix(data: ReleaseNotesData): string {
     return `
-        <section class="appendix">
+        <section class="appendix" id="appendix">
             <h2>Appendix: Full Commit List</h2>
             <table class="commit-table">
                 <thead>
