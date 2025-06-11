@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
-import { logger, progress, FileSystem, config as appConfig, HtmlGenerator, fetchJiraTicket, getTicketCodeDiff, createClaudeClient, ParallelProcessor, PDFGenerator } from '../utils';
+import { logger, progress, FileSystem, config as appConfig, HtmlGenerator, getTicketCodeDiff, ParallelProcessor, PDFGenerator, fetchJiraTicketCached, createCachedClaudeClient } from '../utils';
 import { HtmlGeneratorV2 } from '../utils/html-generator-v2';
 import type { ReleaseNotesData, TicketInfo, CommitInfo, JiraCredentials } from '../utils';
 import simpleGit, { SimpleGit } from 'simple-git';
@@ -49,6 +49,7 @@ program
   .option('--pdf-only', 'generate only PDF output (implies --pdf)')
   .option('--debug <tickets>', 'debug mode: process only specified number of tickets', parseInt)
   .option('--optimize', 'use optimized HTML generator for better PDF output')
+  .option('--no-cache', 'disable caching for API and AI calls')
   .action(async (options) => {
     try {
       logger.header('Release Notes Generator v2.0');
@@ -468,13 +469,17 @@ async function stepFetchTicketDetails(config: ReleaseNotesConfig): Promise<void>
   const results = await processor.processWithSlidingWindow(
     tickets,
     async (ticket) => {
-      const ticketData = await fetchJiraTicket(
+      const ticketData = await fetchJiraTicketCached(
         ticket, 
         jiraConfig as JiraCredentials,
         { 
           includeComments: true,
           includeHistory: false,
           format: 'llm'
+        },
+        {
+          ttl: 60 * 60 * 1000, // Cache for 1 hour
+          enabled: config.fetchJiraDetails
         }
       );
       
@@ -520,13 +525,22 @@ async function stepAnalyzeCode(_git: SimpleGit, config: ReleaseNotesConfig): Pro
   }
 
   // Check if Claude is available
-  const claudeClient = createClaudeClient(undefined, config.aiModel);
+  const claudeClient = createCachedClaudeClient(undefined, config.aiModel, {
+    debug: config.verbose,
+    enabled: config.useAI
+  });
   if (!claudeClient) {
     logger.warn('Claude API not configured. Skipping AI analysis.');
     logger.info('Set ANTHROPIC_API_KEY to enable AI-powered analysis.');
     await FileSystem.writeJSON(outputFile, {});
     return;
   }
+
+  // Set cache options
+  claudeClient.setCacheOptions({
+    enabled: true,
+    ttl: 24 * 60 * 60 * 1000 // Cache AI responses for 24 hours
+  });
   
   if (config.verbose && config.aiModel) {
     logger.info(`Using AI model: ${config.aiModel}`);

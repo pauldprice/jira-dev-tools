@@ -12,7 +12,7 @@ export interface TicketAnalysis {
 
 export class ClaudeClient {
   private client: Anthropic;
-  private model: string;
+  protected model: string;
   
   constructor(apiKey: string, model?: string) {
     this.client = new Anthropic({

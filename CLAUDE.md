@@ -26,6 +26,10 @@ The Gather Toolbox is a TypeScript-based CLI utility collection for development 
 - `claude-client.ts`: AI integration for code analysis
 - `parallel-processor.ts`: Concurrent API request handling
 - `html-generator.ts`: Release notes HTML generation
+- `cache-manager.ts`: Hash-based caching system for API/AI calls
+- `cached-fetch.ts`: Fetch wrapper with automatic caching
+- `cached-claude.ts`: Claude API wrapper with caching
+- `cached-jira.ts`: Jira API wrapper with caching
 
 ## Development Guidelines
 
@@ -107,7 +111,23 @@ The Gather Toolbox is a TypeScript-based CLI utility collection for development 
 
 # Run with verbose output
 ./toolbox release-notes --repo /path/to/repo -v
+
+# Manage cache
+./toolbox cache stats
+./toolbox cache clear
+./toolbox cache clear --namespace jira
 ```
+
+## Caching System
+
+The toolbox includes a comprehensive caching system to speed up development and reduce API costs:
+
+- **Hash-based**: Requests are hashed to create deterministic cache keys
+- **Namespace support**: Different tools use separate cache namespaces (jira, claude, fetch)
+- **TTL support**: Configurable time-to-live for cache entries
+- **Transparent**: Works automatically without code changes
+
+Cache is stored in `.toolbox_cache/` by default and can be managed via the cache command.
 
 ## Future Considerations
 

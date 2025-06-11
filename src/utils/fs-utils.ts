@@ -1,6 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { existsSync } from 'fs';
+import { existsSync, mkdirSync } from 'fs';
 
 export class FileSystem {
   static async ensureDir(dirPath: string): Promise<void> {
@@ -64,5 +64,23 @@ export class FileSystem {
     return entries
       .filter(entry => entry.isDirectory())
       .map(entry => path.join(dirPath, entry.name));
+  }
+
+  static ensureDirSync(dirPath: string): void {
+    if (!existsSync(dirPath)) {
+      mkdirSync(dirPath, { recursive: true });
+    }
+  }
+
+  static async readdir(dirPath: string): Promise<string[]> {
+    return await fs.readdir(dirPath);
+  }
+
+  static async stat(filePath: string): Promise<{ size: number; mtime: Date }> {
+    const stats = await fs.stat(filePath);
+    return {
+      size: stats.size,
+      mtime: stats.mtime
+    };
   }
 }

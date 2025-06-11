@@ -10,3 +10,7 @@ export * from './git-diff';
 export * from './claude-client';
 export * from './parallel-processor';
 export * from './pdf-generator';
+export * from './cache-manager';
+export * from './cached-fetch';
+export * from './cached-claude';
+export * from './cached-jira';
