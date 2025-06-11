@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
-import { logger, progress, FileSystem } from '../utils';
+import { logger, progress, FileSystem, config as appConfig, HtmlGenerator } from '../utils';
+import type { ReleaseNotesData, TicketInfo, CommitInfo } from '../utils';
 import simpleGit, { SimpleGit } from 'simple-git';
 import * as path from 'path';
 import { format } from 'date-fns';
@@ -290,16 +291,147 @@ async function stepExtractTickets(config: ReleaseNotesConfig): Promise<void> {
   }
 }
 
-async function stepCategorizeTickets(_config: ReleaseNotesConfig): Promise<void> {
+async function stepCategorizeTickets(config: ReleaseNotesConfig): Promise<void> {
   logger.header('Step 3: Categorizing Tickets');
-  logger.warn('Categorization implementation pending...');
-  // TODO: Implement categorization logic
+  
+  const commitsFile = path.join(config.workDir, 'commits.txt');
+  const ticketsFile = path.join(config.workDir, 'tickets.txt');
+  const outputFile = path.join(config.workDir, 'categories.json');
+  
+  if (!FileSystem.exists(commitsFile) || !FileSystem.exists(ticketsFile)) {
+    throw new Error('Required files not found. Run previous steps first.');
+  }
+  
+  if (FileSystem.exists(outputFile)) {
+    logger.info('Using cached categories');
+    return;
+  }
+
+  // Initialize categories
+  const categories: Record<string, string[]> = {
+    bug_fixes: [],
+    new_features: [],
+    ui_updates: [],
+    api_changes: [],
+    refactoring: [],
+    other: []
+  };
+
+  const commits = await FileSystem.readFile(commitsFile);
+  const tickets = (await FileSystem.readFile(ticketsFile)).split('\n').filter(Boolean);
+  
+  const total = tickets.length;
+  let current = 0;
+
+  progress.start(`Categorizing ${total} tickets...`);
+
+  for (const ticket of tickets) {
+    current++;
+    if (config.verbose) {
+      progress.update(`Categorizing ${current}/${total}: ${ticket}`);
+    }
+
+    // Get all commits for this ticket
+    const ticketCommits = commits.split('\n')
+      .filter(line => line.includes(ticket))
+      .join(' ').toLowerCase();
+
+    // Categorize based on commit messages
+    let category = 'other';
+    
+    if (/\b(fix|bug|error|crash|issue|resolve|patch)\b/.test(ticketCommits)) {
+      category = 'bug_fixes';
+    } else if (/\b(add|new|implement|create|feature|introduce)\b/.test(ticketCommits)) {
+      category = 'new_features';
+    } else if (/\b(ui|style|css|design|layout|responsive|theme)\b/.test(ticketCommits)) {
+      category = 'ui_updates';
+    } else if (/\b(api|endpoint|route|controller|backend|service)\b/.test(ticketCommits)) {
+      category = 'api_changes';
+    } else if (/\b(refactor|cleanup|optimize|improve|simplify)\b/.test(ticketCommits)) {
+      category = 'refactoring';
+    }
+
+    categories[category].push(ticket);
+  }
+
+  await FileSystem.writeJSON(outputFile, categories);
+  
+  progress.succeed('Categorization complete');
+
+  // Show summary
+  logger.info('Category Summary:');
+  Object.entries(categories).forEach(([cat, tickets]) => {
+    if (tickets.length > 0) {
+      logger.info(`  ${cat.replace(/_/g, ' ')}: ${tickets.length}`);
+    }
+  });
 }
 
-async function stepFetchTicketDetails(_config: ReleaseNotesConfig): Promise<void> {
+async function stepFetchTicketDetails(config: ReleaseNotesConfig): Promise<void> {
   logger.header('Step 4: Fetching Ticket Details');
-  logger.warn('Jira integration pending...');
-  // TODO: Implement Jira fetching using our fetch-jira tool
+  
+  if (!config.fetchJiraDetails) {
+    logger.info('Skipping Jira details (disabled)');
+    return;
+  }
+
+  const ticketsFile = path.join(config.workDir, 'tickets.txt');
+  const outputFile = path.join(config.workDir, 'ticket_details.json');
+  
+  if (!FileSystem.exists(ticketsFile)) {
+    throw new Error('tickets.txt not found. Run extract step first.');
+  }
+  
+  if (FileSystem.exists(outputFile)) {
+    logger.info('Using cached ticket details');
+    return;
+  }
+
+  const tickets = (await FileSystem.readFile(ticketsFile)).split('\n').filter(Boolean);
+  const ticketDetails: Record<string, any> = {};
+  
+  // Check if we have Jira configuration
+  const jiraConfig = appConfig.getJiraConfig();
+  if (!jiraConfig) {
+    logger.warn('Jira configuration not found. Skipping ticket details.');
+    await FileSystem.writeJSON(outputFile, ticketDetails);
+    return;
+  }
+
+  const total = tickets.length;
+  let current = 0;
+  let successful = 0;
+
+  progress.start(`Fetching details for ${total} tickets...`);
+
+  // Import fetch-jira functionality
+  const { execSync } = await import('child_process');
+  const toolboxPath = path.resolve(__dirname, '../../..');
+
+  for (const ticket of tickets) {
+    current++;
+    progress.update(`Fetching ${current}/${total}: ${ticket}`);
+
+    try {
+      // Use our fetch-jira tool via command line
+      const result = execSync(
+        `cd "${toolboxPath}" && ./toolbox fetch-jira ${ticket} --format llm`,
+        { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] }
+      );
+
+      const ticketData = JSON.parse(result);
+      ticketDetails[ticket] = ticketData;
+      successful++;
+    } catch (error) {
+      if (config.verbose) {
+        logger.debug(`Failed to fetch ${ticket}: ${error}`);
+      }
+    }
+  }
+
+  await FileSystem.writeJSON(outputFile, ticketDetails);
+  
+  progress.succeed(`Fetched details for ${successful}/${total} tickets`);
 }
 
 async function stepAnalyzeCode(_git: SimpleGit, _config: ReleaseNotesConfig): Promise<void> {
@@ -308,10 +440,157 @@ async function stepAnalyzeCode(_git: SimpleGit, _config: ReleaseNotesConfig): Pr
   // TODO: Implement Claude AI integration
 }
 
-async function stepGenerateNotes(_config: ReleaseNotesConfig): Promise<void> {
+async function stepGenerateNotes(config: ReleaseNotesConfig): Promise<void> {
   logger.header('Step 6: Generating Release Notes');
-  logger.warn('Note generation pending...');
-  // TODO: Implement final markdown generation
+  
+  const commitsFile = path.join(config.workDir, 'commits.txt');
+  const ticketsFile = path.join(config.workDir, 'tickets.txt');
+  const categoriesFile = path.join(config.workDir, 'categories.json');
+  const detailsFile = path.join(config.workDir, 'ticket_details.json');
+  
+  if (!FileSystem.exists(commitsFile) || !FileSystem.exists(ticketsFile) || !FileSystem.exists(categoriesFile)) {
+    throw new Error('Required files not found. Run previous steps first.');
+  }
+
+  progress.start('Generating release notes...');
+
+  // Load all data
+  const commits = (await FileSystem.readFile(commitsFile)).split('\n').filter(Boolean);
+  const tickets = (await FileSystem.readFile(ticketsFile)).split('\n').filter(Boolean);
+  const categories = await FileSystem.readJSON(categoriesFile);
+  const ticketDetails = FileSystem.exists(detailsFile) ? await FileSystem.readJSON(detailsFile) : {};
+
+
+  // Build commit info
+  const allCommits: CommitInfo[] = commits.map(line => {
+    const [hash, ...messageParts] = line.split(' ');
+    return {
+      hash,
+      author: '', // We don't have author info in the simple format
+      message: messageParts.join(' ')
+    };
+  });
+
+  // Build categorized ticket info
+  const categorizedTickets: ReleaseNotesData['categories'] = {
+    bugFixes: [],
+    newFeatures: [],
+    uiUpdates: [],
+    apiChanges: [],
+    refactoring: [],
+    other: []
+  };
+
+  // Map category names
+  const categoryMap: Record<string, keyof typeof categorizedTickets> = {
+    'bug_fixes': 'bugFixes',
+    'new_features': 'newFeatures',
+    'ui_updates': 'uiUpdates',
+    'api_changes': 'apiChanges',
+    'refactoring': 'refactoring',
+    'other': 'other'
+  };
+
+  // Process each category
+  for (const [category, ticketIds] of Object.entries(categories)) {
+    const mappedCategory = categoryMap[category];
+    if (!mappedCategory) continue;
+
+    for (const ticketId of ticketIds as string[]) {
+      const details = ticketDetails[ticketId];
+      const ticketCommits = allCommits.filter(c => c.message.includes(ticketId));
+
+      const ticketInfo: TicketInfo = {
+        id: ticketId,
+        title: details?.title || ticketCommits[0]?.message || 'No title',
+        status: details?.status,
+        assignee: details?.assignee,
+        description: details?.description,
+        commits: ticketCommits,
+        testingNotes: getTestingNotes(category),
+        risks: []
+      };
+
+      categorizedTickets[mappedCategory].push(ticketInfo);
+    }
+  }
+
+  // Build release notes data
+  const releaseData: ReleaseNotesData = {
+    title: 'Release Notes',
+    date: format(new Date(), 'MMMM d, yyyy'),
+    version: 'Generated by Release Notes Generator v2.0',
+    branch: {
+      source: config.sourceBranch,
+      target: config.targetBranch
+    },
+    stats: {
+      totalCommits: commits.length,
+      totalTickets: tickets.length,
+      bugFixes: categorizedTickets.bugFixes.length,
+      newFeatures: categorizedTickets.newFeatures.length,
+      uiUpdates: categorizedTickets.uiUpdates.length,
+      apiChanges: categorizedTickets.apiChanges.length,
+      refactoring: categorizedTickets.refactoring.length,
+      other: categorizedTickets.other.length
+    },
+    categories: categorizedTickets,
+    testingGuidelines: [
+      'All unit tests passing',
+      'Integration tests completed',
+      'Manual smoke testing performed',
+      'Performance benchmarks acceptable',
+      'No critical console errors'
+    ],
+    commits: allCommits
+  };
+
+  // Generate HTML
+  const html = HtmlGenerator.generateReleaseNotes(releaseData);
+  
+  // Write output file
+  await FileSystem.writeFile(config.outputFile, html);
+  
+  progress.succeed('Release notes generated');
+  
+  logger.success(`Output saved to: ${config.outputFile}`);
+}
+
+function getTestingNotes(category: string): string[] {
+  switch (category) {
+    case 'bug_fixes':
+      return [
+        'Verify the reported issue is resolved',
+        'Test edge cases around the fix',
+        'Check for regression in related functionality'
+      ];
+    case 'new_features':
+      return [
+        'Test all new functionality thoroughly',
+        'Verify UI/UX matches specifications',
+        'Check permissions and access controls'
+      ];
+    case 'ui_updates':
+      return [
+        'Visual regression testing required',
+        'Test across all supported browsers',
+        'Verify mobile responsiveness'
+      ];
+    case 'api_changes':
+      return [
+        'Test all affected endpoints',
+        'Verify backward compatibility',
+        'Check error handling and validation'
+      ];
+    case 'refactoring':
+      return [
+        'Full regression testing required',
+        'Compare performance metrics',
+        'Verify no behavior changes'
+      ];
+    default:
+      return ['General testing required'];
+  }
 }
 
 program.parse();
