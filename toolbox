@@ -1,0 +1,72 @@
+#!/bin/bash
+
+# Gather Toolbox - Main entry point for all TypeScript tools
+# This script provides a unified interface to run various development tools
+
+set -e
+
+# Get the directory where this script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+MAGENTA='\033[0;35m'
+BOLD='\033[1m'
+NC='\033[0m' # No Color
+
+# Check if node_modules exists
+if [ ! -d "$SCRIPT_DIR/node_modules" ]; then
+    echo -e "${YELLOW}Dependencies not installed. Running npm install...${NC}"
+    cd "$SCRIPT_DIR" && npm install
+fi
+
+# Function to display usage
+usage() {
+    echo -e "${BOLD}${BLUE}Gather Toolbox${NC}"
+    echo ""
+    echo -e "${BOLD}USAGE:${NC}"
+    echo "    toolbox <command> [options]"
+    echo ""
+    echo -e "${BOLD}COMMANDS:${NC}"
+    echo -e "    ${CYAN}fetch-jira${NC}      Fetch Jira ticket details"
+    echo -e "    ${CYAN}fetch-attachment${NC} Download Jira attachment"
+    echo -e "    ${CYAN}release-notes${NC}   Generate HTML release notes from git commits"
+    echo -e "    ${CYAN}help${NC}            Show this help message"
+    echo ""
+    echo -e "${BOLD}EXAMPLES:${NC}"
+    echo "    toolbox fetch-jira APP-1234"
+    echo "    toolbox release-notes --help"
+    echo "    toolbox release-notes --output notes.md"
+    echo ""
+    echo -e "Run '${CYAN}toolbox <command> --help${NC}' for more information on a specific command."
+}
+
+# Main command parsing
+COMMAND="${1:-help}"
+shift || true
+
+# Remove the command from arguments to pass the rest to the tool
+case "$COMMAND" in
+    fetch-jira|jira)
+        cd "$SCRIPT_DIR" && npx ts-node src/tools/fetch-jira-ticket.ts "$@"
+        ;;
+    fetch-attachment|attachment|attach)
+        cd "$SCRIPT_DIR" && npx ts-node src/tools/fetch-jira-attachment.ts "$@"
+        ;;
+    release-notes|release|notes)
+        cd "$SCRIPT_DIR" && npx ts-node src/tools/generate-release-notes.ts "$@"
+        ;;
+    help|--help|-h)
+        usage
+        ;;
+    *)
+        echo -e "${RED}Unknown command: $COMMAND${NC}"
+        echo ""
+        usage
+        exit 1
+        ;;
+esac
