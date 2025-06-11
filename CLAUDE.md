@@ -36,6 +36,13 @@ The Gather Toolbox is a TypeScript-based CLI utility collection for development 
 - NO COMMENTS unless explicitly requested
 - Follow existing code patterns in the codebase
 
+### Commit Messages
+- Write clear, concise commit messages
+- Use conventional commit format (feat:, fix:, etc.)
+- Focus on what changed and why
+- DO NOT mention Claude, AI assistance, or "generated with" in commits
+- Keep commits professional and focused on the code changes
+
 ### Error Handling
 - Always use try/catch blocks for external API calls
 - Provide helpful error messages with context

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
-import { logger, progress, FileSystem, config as appConfig, HtmlGenerator, fetchJiraTicket, getTicketCodeDiff, createClaudeClient, ParallelProcessor } from '../utils';
+import { logger, progress, FileSystem, config as appConfig, HtmlGenerator, fetchJiraTicket, getTicketCodeDiff, createClaudeClient, ParallelProcessor, PDFGenerator } from '../utils';
+import { HtmlGeneratorV2 } from '../utils/html-generator-v2';
 import type { ReleaseNotesData, TicketInfo, CommitInfo, JiraCredentials } from '../utils';
 import simpleGit, { SimpleGit } from 'simple-git';
 import * as path from 'path';
@@ -18,6 +19,10 @@ interface ReleaseNotesConfig {
   fetchJiraDetails: boolean;
   useAI: boolean;
   aiModel?: string;
+  generatePDF: boolean;
+  pdfFile?: string;
+  debugLimit?: number;
+  optimize?: boolean;
 }
 
 const program = new Command();
@@ -40,6 +45,10 @@ program
   .option('--no-ai', 'skip AI-powered code analysis')
   .option('--jira-project <prefix>', 'Jira project prefix (e.g., APP)', 'APP')
   .option('--ai-model <model>', 'Claude AI model to use (haiku, sonnet, opus)', 'sonnet')
+  .option('--pdf', 'generate PDF output in addition to HTML')
+  .option('--pdf-only', 'generate only PDF output (implies --pdf)')
+  .option('--debug <tickets>', 'debug mode: process only specified number of tickets', parseInt)
+  .option('--optimize', 'use optimized HTML generator for better PDF output')
   .action(async (options) => {
     try {
       logger.header('Release Notes Generator v2.0');
@@ -64,10 +73,18 @@ program
         fetchJiraDetails: !options.noJira,
         useAI: !options.noAi,
         aiModel: options.aiModel,
+        generatePDF: options.pdf || options.pdfOnly || false,
+        pdfFile: path.join(repoPath, options.output.replace('.html', '.pdf')),
+        debugLimit: options.debug,
+        optimize: options.optimize || false,
       };
 
       logger.info(`Repository: ${config.repoPath}`);
       logger.info(`Branches: ${config.targetBranch}..${config.sourceBranch}`);
+      
+      if (config.debugLimit) {
+        logger.info(`Debug mode: Processing only ${config.debugLimit} tickets`);
+      }
 
       if (options.listSteps) {
         displaySteps();
@@ -95,7 +112,31 @@ program
         await runAllSteps(git, config, options.resume);
       }
 
-      logger.success(`Release notes generated: ${config.outputFile}`);
+      // Generate PDF if requested
+      if (config.generatePDF && config.pdfFile) {
+        try {
+          progress.start('Generating PDF...');
+          await PDFGenerator.generateFromHTML(config.outputFile, config.pdfFile);
+          progress.succeed(`PDF generated: ${config.pdfFile}`);
+        } catch (error: any) {
+          progress.fail();
+          logger.error(`Failed to generate PDF: ${error.message}`);
+          // Don't fail the whole process if PDF generation fails
+        }
+      }
+
+      // Final success message
+      if (options.pdfOnly && config.pdfFile) {
+        logger.success(`Release notes PDF generated: ${config.pdfFile}`);
+        // Remove HTML file if only PDF was requested
+        try {
+          await FileSystem.remove(config.outputFile);
+        } catch (error) {
+          // Ignore cleanup errors
+        }
+      } else {
+        logger.success(`Release notes generated: ${config.outputFile}`);
+      }
 
       // Cleanup if not keeping files
       if (!config.keepFiles) {
@@ -275,7 +316,7 @@ async function stepExtractTickets(config: ReleaseNotesConfig): Promise<void> {
     throw new Error('commits.txt not found. Run fetch step first.');
   }
   
-  if (FileSystem.exists(outputFile)) {
+  if (FileSystem.exists(outputFile) && !config.debugLimit) {
     logger.info('Using cached tickets');
     return;
   }
@@ -284,7 +325,14 @@ async function stepExtractTickets(config: ReleaseNotesConfig): Promise<void> {
   
   const commits = await FileSystem.readFile(inputFile);
   const ticketPattern = new RegExp(`${config.jiraProject}-\\d+`, 'g');
-  const tickets = [...new Set(commits.match(ticketPattern) || [])];
+  let tickets = [...new Set(commits.match(ticketPattern) || [])];
+  
+  // Apply debug limit if specified
+  if (config.debugLimit && tickets.length > config.debugLimit) {
+    const originalCount = tickets.length;
+    tickets = tickets.slice(0, config.debugLimit);
+    logger.info(`Debug mode: Limited from ${originalCount} to ${tickets.length} tickets`);
+  }
   
   await FileSystem.writeFile(outputFile, tickets.join('\n'));
   
@@ -701,8 +749,10 @@ async function stepGenerateNotes(config: ReleaseNotesConfig): Promise<void> {
     commits: allCommits
   };
 
-  // Generate HTML
-  const html = HtmlGenerator.generateReleaseNotes(releaseData);
+  // Generate HTML using optimized generator if requested
+  const html = config.optimize 
+    ? HtmlGeneratorV2.generateReleaseNotes(releaseData)
+    : HtmlGenerator.generateReleaseNotes(releaseData);
   
   // Write output file
   await FileSystem.writeFile(config.outputFile, html);

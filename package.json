@@ -12,7 +12,13 @@
     "release-notes": "ts-node src/tools/generate-release-notes.ts",
     "toolbox": "./toolbox"
   },
-  "keywords": ["tools", "automation", "jira", "release-notes", "git"],
+  "keywords": [
+    "tools",
+    "automation",
+    "jira",
+    "release-notes",
+    "git"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
@@ -24,6 +30,7 @@
     "dotenv": "^16.3.1",
     "dotenv-expand": "^10.0.0",
     "ora": "^5.4.1",
+    "puppeteer": "^24.10.0",
     "simple-git": "^3.19.1"
   },
   "devDependencies": {
