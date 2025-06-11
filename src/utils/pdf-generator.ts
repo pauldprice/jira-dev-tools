@@ -54,14 +54,12 @@ export class PDFGenerator {
         path: pdfPath,
         format: 'A4' as const,
         printBackground: true,
-        displayHeaderFooter: true,
-        headerTemplate: '<div style="font-size: 9pt; color: #7f8c8d; width: 100%; text-align: center; margin-top: 10px;">Release Notes - ' + new Date().toLocaleDateString() + '</div>',
-        footerTemplate: '<div style="font-size: 9pt; color: #7f8c8d; width: 100%; text-align: center; margin-bottom: 10px;">Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>',
+        displayHeaderFooter: false, // Let CSS @page rules handle headers/footers
         margin: {
-          top: '80px',
-          right: '60px',
-          bottom: '80px',
-          left: '60px'
+          top: '0',
+          right: '0',
+          bottom: '0',
+          left: '0'
         },
         preferCSSPageSize: true,
         ...options
