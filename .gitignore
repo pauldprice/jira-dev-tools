@@ -39,6 +39,10 @@ pids
 # Output files
 release_notes_*.md
 release_notes_*.pdf
+release_notes_*.html
+
+# Cache directory
+.toolbox_cache/
 
 # Temporary files
 *.tmp
