@@ -506,9 +506,6 @@ export class HtmlGenerator {
                 <li>All changes have passed acceptance testing</li>
             </ul>
             
-            <h2>Risk Assessment</h2>
-            <p>This release contains ${this.assessRiskLevel(data)} based on the scope and nature of changes.</p>
-            
             <h2>Quick Reference</h2>
             <ul>
                 <li><strong>Risk Distribution:</strong> ${this.getRiskLevelSummary(data)}</li>
@@ -628,15 +625,6 @@ export class HtmlGenerator {
     return parts.join(', ');
   }
 
-  private static assessRiskLevel(data: ReleaseNotesData): string {
-    if (data.stats.apiChanges > 2) {
-      return '<span class="risk-badge risk-high">HIGH RISK</span> changes';
-    }
-    if (data.stats.bugFixes > 5) {
-      return '<span class="risk-badge risk-medium">MEDIUM RISK</span> changes';
-    }
-    return '<span class="risk-badge risk-low">LOW RISK</span> changes';
-  }
 
   private static generateTicketSummaryTable(data: ReleaseNotesData): string {
     const allTickets = [
