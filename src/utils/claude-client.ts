@@ -133,7 +133,7 @@ Do not include testing notes or risks in this summary.`;
     }
   }
   
-  private buildAnalysisPrompt(diff: CodeDiff, jiraData?: LLMFriendlyOutput): string {
+  protected buildAnalysisPrompt(diff: CodeDiff, jiraData?: LLMFriendlyOutput): string {
     const parts: string[] = [];
     
     // Add Jira context if available

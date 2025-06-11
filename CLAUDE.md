@@ -13,6 +13,43 @@ The Gather Toolbox is a TypeScript-based CLI utility collection for development 
 - **Main Entry**: `toolbox` shell script that invokes individual tools via ts-node
 - **Structure**: Modular architecture with shared utilities in `src/utils/`
 
+## Configuration
+
+The toolbox supports multiple configuration methods (in order of precedence):
+
+1. **Environment Variables**: Standard environment variables (highest priority)
+2. **Project .env file**: `.env` file in the project root
+3. **Shell config**: `~/bin/.jiraconfig` for Jira credentials (legacy support)
+4. **Home directory config**: Config files in your home directory (NEW!)
+
+### Home Directory Configuration
+
+Store your API keys and credentials in one of these locations:
+- `~/.toolbox/config.json` (recommended)
+- `~/.toolbox/config`
+- `~/.toolboxrc.json`
+- `~/.toolboxrc`
+
+Example JSON format:
+```json
+{
+  "ANTHROPIC_API_KEY": "your-api-key-here",
+  "JIRA_BASE_URL": "https://your-domain.atlassian.net",
+  "JIRA_EMAIL": "your-email@example.com",
+  "JIRA_API_TOKEN": "your-jira-api-token"
+}
+```
+
+Example key=value format:
+```
+ANTHROPIC_API_KEY=your-api-key-here
+JIRA_BASE_URL=https://your-domain.atlassian.net
+JIRA_EMAIL=your-email@example.com
+JIRA_API_TOKEN=your-jira-api-token
+```
+
+Note: Environment variables always take precedence over config files.
+
 ## Key Components
 
 ### Tools
@@ -151,6 +188,52 @@ Cache is stored in `.toolbox_cache/` by default and can be managed via the cache
 - Enhanced AI analysis capabilities
 - Improved error recovery mechanisms
 
+## PDF Analysis
+
+Claude has built-in support for analyzing PDF files visually. The toolbox includes an `analyze-pdf` command that leverages this capability:
+
+### PDF Support Details
+- **Max file size**: 32MB
+- **Max pages**: 100 pages per request
+- **Format**: Standard PDF (no encryption/passwords)
+- **API**: Sends PDF as base64 encoded document
+
+### Usage
+```bash
+# Basic PDF analysis
+./toolbox analyze-pdf release_notes.pdf
+
+# Focus on specific aspects
+./toolbox analyze-pdf report.pdf --focus readability
+./toolbox analyze-pdf document.pdf --focus layout
+
+# Save analysis to file
+./toolbox analyze-pdf report.pdf --output analysis.txt
+
+# Get structured JSON output
+./toolbox analyze-pdf report.pdf --json --output analysis.json
+
+# Custom analysis prompt
+./toolbox analyze-pdf manual.pdf --prompt "Check for accessibility compliance"
+```
+
+### Focus Areas
+- **layout**: Page organization, structure, visual balance
+- **readability**: Font sizes, line spacing, text legibility
+- **formatting**: Style consistency, tables, colors
+- **accessibility**: Vision impairment considerations, screen reader compatibility
+- **all**: Comprehensive analysis (default)
+
+### When Analyzing Release Notes PDFs
+Look for:
+1. Page break issues (content split awkwardly)
+2. Truncated content (especially in tables or lists)
+3. Consistent formatting across all sections
+4. Proper page numbering and headers/footers
+5. Visual hierarchy and readability
+6. Professional appearance
+7. Any rendering artifacts or errors
+
 ## Quick Reference
 
 When working on this project:
@@ -159,3 +242,4 @@ When working on this project:
 3. Maintain backward compatibility
 4. Focus on user experience and clear output
 5. Keep tools focused and single-purpose
+6. Use the analyze-pdf tool to visually inspect generated PDFs

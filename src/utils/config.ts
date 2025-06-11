@@ -49,7 +49,10 @@ export class ConfigLoader {
     // 2. Load from shell-sourced environment for .jiraconfig compatibility
     this.loadShellEnvironment();
 
-    // 3. Process environment variables into config
+    // 3. Load from home directory config files
+    this.loadHomeConfig();
+
+    // 4. Process environment variables into config
     this.config = {
       JIRA_BASE_URL: process.env.JIRA_BASE_URL,
       JIRA_EMAIL: process.env.JIRA_EMAIL,
@@ -124,6 +127,68 @@ export class ConfigLoader {
       }
     } catch (error) {
       // Silently fail if config cannot be read
+    }
+  }
+
+  private loadHomeConfig(): void {
+    const homeDir = os.homedir();
+    const configPaths = [
+      path.join(homeDir, '.toolbox', 'config'),
+      path.join(homeDir, '.toolbox', 'config.json'),
+      path.join(homeDir, '.toolboxrc'),
+      path.join(homeDir, '.toolboxrc.json')
+    ];
+
+    for (const configPath of configPaths) {
+      if (fs.existsSync(configPath)) {
+        try {
+          const content = fs.readFileSync(configPath, 'utf-8').trim();
+          
+          // Try to parse as JSON first
+          try {
+            const config = JSON.parse(content);
+            // Only set environment variables if they're not already set
+            if (config.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_API_KEY) {
+              process.env.ANTHROPIC_API_KEY = config.ANTHROPIC_API_KEY;
+            }
+            if (config.JIRA_BASE_URL && !process.env.JIRA_BASE_URL) {
+              process.env.JIRA_BASE_URL = config.JIRA_BASE_URL;
+            }
+            if (config.JIRA_EMAIL && !process.env.JIRA_EMAIL) {
+              process.env.JIRA_EMAIL = config.JIRA_EMAIL;
+            }
+            if (config.JIRA_API_TOKEN && !process.env.JIRA_API_TOKEN) {
+              process.env.JIRA_API_TOKEN = config.JIRA_API_TOKEN;
+            }
+          } catch {
+            // If not JSON, try key=value format
+            const lines = content.split('\n');
+            for (const line of lines) {
+              const trimmedLine = line.trim();
+              if (trimmedLine && !trimmedLine.startsWith('#')) {
+                const [key, ...valueParts] = trimmedLine.split('=');
+                if (key && valueParts.length > 0) {
+                  const value = valueParts.join('=').trim().replace(/^["']|["']$/g, '');
+                  if (key === 'ANTHROPIC_API_KEY' && !process.env.ANTHROPIC_API_KEY) {
+                    process.env.ANTHROPIC_API_KEY = value;
+                  } else if (key === 'JIRA_BASE_URL' && !process.env.JIRA_BASE_URL) {
+                    process.env.JIRA_BASE_URL = value;
+                  } else if (key === 'JIRA_EMAIL' && !process.env.JIRA_EMAIL) {
+                    process.env.JIRA_EMAIL = value;
+                  } else if (key === 'JIRA_API_TOKEN' && !process.env.JIRA_API_TOKEN) {
+                    process.env.JIRA_API_TOKEN = value;
+                  }
+                }
+              }
+            }
+          }
+          
+          // Stop after loading the first config file found
+          break;
+        } catch (error) {
+          // Continue to next config file
+        }
+      }
     }
   }
 

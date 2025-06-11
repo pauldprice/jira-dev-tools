@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
 import { logger, progress, FileSystem, config as appConfig, HtmlGenerator, getTicketCodeDiff, ParallelProcessor, PDFGenerator, fetchJiraTicketCached, createCachedClaudeClient } from '../utils';
-import { HtmlGeneratorV2 } from '../utils/html-generator-v2';
 import type { ReleaseNotesData, TicketInfo, CommitInfo, JiraCredentials } from '../utils';
 import simpleGit, { SimpleGit } from 'simple-git';
 import * as path from 'path';
@@ -22,7 +21,7 @@ interface ReleaseNotesConfig {
   generatePDF: boolean;
   pdfFile?: string;
   debugLimit?: number;
-  optimize?: boolean;
+  releaseVersion: string;
 }
 
 const program = new Command();
@@ -30,10 +29,11 @@ const program = new Command();
 program
   .name('generate-release-notes')
   .description('Generate release notes from git commits between branches')
+  .requiredOption('--version <version>', 'release version (e.g., V17.01.00)')
   .option('-p, --repo <path>', 'path to git repository (default: current directory)', process.cwd())
   .option('-s, --source <branch>', 'source branch with new commits (default: origin/test)', 'origin/test')
   .option('-t, --target <branch>', 'target branch to compare against (default: origin/master)', 'origin/master')
-  .option('-o, --output <file>', 'output file name', `release_notes_${format(new Date(), 'yyyy-MM-dd')}.html`)
+  .option('-o, --output <file>', 'output file name')
   .option('--work-dir <dir>', 'working directory for intermediate files', '.release_notes_work')
   .option('-c, --clean', 'clean intermediate files and exit')
   .option('-r, --resume', 'resume from last successful step')
@@ -48,7 +48,6 @@ program
   .option('--pdf', 'generate PDF output in addition to HTML')
   .option('--pdf-only', 'generate only PDF output (implies --pdf)')
   .option('--debug <tickets>', 'debug mode: process only specified number of tickets', parseInt)
-  .option('--optimize', 'use optimized HTML generator for better PDF output')
   .option('--no-cache', 'disable caching for API and AI calls')
   .action(async (options) => {
     try {
@@ -62,12 +61,15 @@ program
         process.exit(1);
       }
 
+      // Generate output filename based on version if not specified
+      const outputFileName = options.output || `release_notes_${options.version}_${format(new Date(), 'yyyy-MM-dd')}.html`;
+      
       const config: ReleaseNotesConfig = {
         repoPath,
         sourceBranch: options.source,
         targetBranch: options.target,
         workDir: path.join(repoPath, options.workDir),
-        outputFile: path.join(repoPath, options.output),
+        outputFile: path.join(repoPath, outputFileName),
         keepFiles: options.keep || false,
         verbose: options.verbose || false,
         jiraProject: options.jiraProject,
@@ -75,9 +77,9 @@ program
         useAI: !options.noAi,
         aiModel: options.aiModel,
         generatePDF: options.pdf || options.pdfOnly || false,
-        pdfFile: path.join(repoPath, options.output.replace('.html', '.pdf')),
+        pdfFile: path.join(repoPath, outputFileName.replace('.html', '.pdf')),
         debugLimit: options.debug,
-        optimize: options.optimize || false,
+        releaseVersion: options.version,
       };
 
       logger.info(`Repository: ${config.repoPath}`);
@@ -119,21 +121,20 @@ program
           progress.start('Generating PDF...');
           await PDFGenerator.generateFromHTML(config.outputFile, config.pdfFile);
           progress.succeed(`PDF generated: ${config.pdfFile}`);
+          
+          // Always remove HTML file after successful PDF generation
+          try {
+            await FileSystem.remove(config.outputFile);
+          } catch (error) {
+            // Ignore cleanup errors
+          }
+          
+          logger.success(`Release notes PDF generated: ${config.pdfFile}`);
         } catch (error: any) {
           progress.fail();
           logger.error(`Failed to generate PDF: ${error.message}`);
+          logger.info(`HTML file retained at: ${config.outputFile}`);
           // Don't fail the whole process if PDF generation fails
-        }
-      }
-
-      // Final success message
-      if (options.pdfOnly && config.pdfFile) {
-        logger.success(`Release notes PDF generated: ${config.pdfFile}`);
-        // Remove HTML file if only PDF was requested
-        try {
-          await FileSystem.remove(config.outputFile);
-        } catch (error) {
-          // Ignore cleanup errors
         }
       } else {
         logger.success(`Release notes generated: ${config.outputFile}`);
@@ -531,7 +532,7 @@ async function stepAnalyzeCode(_git: SimpleGit, config: ReleaseNotesConfig): Pro
   });
   if (!claudeClient) {
     logger.warn('Claude API not configured. Skipping AI analysis.');
-    logger.info('Set ANTHROPIC_API_KEY to enable AI-powered analysis.');
+    logger.info('To enable AI analysis, set ANTHROPIC_API_KEY in environment or create ~/.toolbox/config.json');
     await FileSystem.writeJSON(outputFile, {});
     return;
   }
@@ -572,9 +573,12 @@ async function stepAnalyzeCode(_git: SimpleGit, config: ReleaseNotesConfig): Pro
       const diff = await getTicketCodeDiff(config.repoPath, ticket, config.targetBranch);
       
       if (!diff) {
-        if (config.verbose) {
-          logger.debug(`No code diff found for ${ticket} - this ticket may not have commits in this branch`);
-        }
+        logger.info(`No code diff found for ${ticket} - this ticket may not have commits in this branch`);
+        return null;
+      }
+      
+      if (!diff.files || diff.files.length === 0) {
+        logger.info(`No file changes found for ${ticket} - commits may only contain merge commits`);
         return null;
       }
 
@@ -621,6 +625,8 @@ async function stepAnalyzeCode(_git: SimpleGit, config: ReleaseNotesConfig): Pro
       const { ticket, data } = result as any;
       codeAnalysis[ticket] = data;
       successful++;
+    } else if (result === null) {
+      logger.debug(`Skipped ${ticket}: No code diff found in branch`);
     }
   });
 
@@ -717,6 +723,14 @@ async function stepGenerateNotes(config: ReleaseNotesConfig): Promise<void> {
       
       // Include risks from AI analysis
       const risks = analysis?.risks || [];
+      
+      // Debug logging
+      if (config.verbose) {
+        logger.info(`Ticket ${ticketId}: testingNotes count = ${testingNotes.length}, risks count = ${risks.length}`);
+        if (testingNotes.length > 0) {
+          logger.info(`First testing note: ${testingNotes[0].substring(0, 50)}...`);
+        }
+      }
 
       const ticketInfo: TicketInfo = {
         id: ticketId,
@@ -735,9 +749,9 @@ async function stepGenerateNotes(config: ReleaseNotesConfig): Promise<void> {
 
   // Build release notes data
   const releaseData: ReleaseNotesData = {
-    title: 'Release Notes',
+    title: `Release Notes - ${config.releaseVersion}`,
     date: format(new Date(), 'MMMM d, yyyy'),
-    version: 'Generated by Release Notes Generator v2.0',
+    version: config.releaseVersion,
     branch: {
       source: config.sourceBranch,
       target: config.targetBranch
@@ -763,10 +777,8 @@ async function stepGenerateNotes(config: ReleaseNotesConfig): Promise<void> {
     commits: allCommits
   };
 
-  // Generate HTML using optimized generator if requested
-  const html = config.optimize 
-    ? HtmlGeneratorV2.generateReleaseNotes(releaseData)
-    : HtmlGenerator.generateReleaseNotes(releaseData);
+  // Generate HTML optimized for PDF output
+  const html = HtmlGenerator.generateReleaseNotes(releaseData);
   
   // Write output file
   await FileSystem.writeFile(config.outputFile, html);
