@@ -302,7 +302,34 @@ export class HtmlGenerator {
         .ticket-meta {
             font-size: 9pt;
             color: #7f8c8d;
-            white-space: nowrap;
+            margin-top: 0.5em;
+            display: flex;
+            gap: 1em;
+            flex-wrap: wrap;
+        }
+        
+        .diff-stats {
+            display: inline-flex;
+            gap: 0.5em;
+            align-items: center;
+        }
+        
+        .diff-added {
+            background-color: #d4f4d4;
+            color: #22863a;
+            padding: 0.1em 0.4em;
+            border-radius: 3px;
+            font-weight: 600;
+            font-size: 0.9em;
+        }
+        
+        .diff-removed {
+            background-color: #fddede;
+            color: #cb2431;
+            padding: 0.1em 0.4em;
+            border-radius: 3px;
+            font-weight: 600;
+            font-size: 0.9em;
         }
         
         .ticket-summary {
@@ -561,7 +588,7 @@ export class HtmlGenerator {
                 <li><strong>${percentBugFixes}%</strong> of changes are bug fixes, improving system stability</li>
                 ${data.stats.newFeatures > 0 ? `<li><strong>${data.stats.newFeatures}</strong> new features enhance user capabilities</li>` : ''}
                 ${data.stats.apiChanges > 0 ? `<li><strong>${data.stats.apiChanges}</strong> API changes require integration review</li>` : ''}
-                <li><strong>Code Impact:</strong> +${totalAdditions.toLocaleString()} lines added, -${totalDeletions.toLocaleString()} lines removed</li>
+                <li><strong>Code Impact:</strong> <span class="diff-added">+${totalAdditions.toLocaleString()}</span> <span class="diff-removed">-${totalDeletions.toLocaleString()}</span></li>
                 <li><strong>Risk Distribution:</strong> ${this.getRiskLevelSummary(data)}</li>
                 <li><strong>Primary Focus:</strong> ${data.primaryFocus || this.getPrimaryFocus(data)}</li>
                 <li><strong>Total Commits:</strong> ${data.stats.totalCommits}</li>
@@ -761,12 +788,6 @@ export class HtmlGenerator {
     
     // Determine category icon
     const categoryIcon = this.getCategoryIcon(ticket);
-    
-    // Format diff stats
-    let diffStats = '';
-    if (ticket.diffStats) {
-      diffStats = ` | +${ticket.diffStats.additions} -${ticket.diffStats.deletions}`;
-    }
 
     return `
         <div class="ticket" id="${ticket.id}">
@@ -776,9 +797,16 @@ export class HtmlGenerator {
                     <span class="ticket-id"><a href="${this.getJiraUrl(ticket.id)}" target="_blank" style="color: #2c3e50; text-decoration: none;">${ticket.id}</a></span>
                     <span class="ticket-title">${ticket.title}</span>
                 </div>
-                <div class="ticket-meta">
-                    ${ticket.assignee || 'Unassigned'} | ${ticket.commits.length} commits${diffStats}
+            </div>
+            <div class="ticket-meta">
+                <span>${ticket.assignee || 'Unassigned'}</span>
+                <span>${ticket.commits.length} ${ticket.commits.length === 1 ? 'commit' : 'commits'}</span>
+                ${ticket.diffStats ? `
+                <div class="diff-stats">
+                    <span class="diff-added">+${ticket.diffStats.additions.toLocaleString()}</span>
+                    <span class="diff-removed">-${ticket.diffStats.deletions.toLocaleString()}</span>
                 </div>
+                ` : ''}
             </div>
             
             <div class="ticket-summary">
