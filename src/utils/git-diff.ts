@@ -25,9 +25,9 @@ export interface FileDiff {
  */
 export function getTicketCommits(repoPath: string, ticketId: string, targetBranch: string = 'origin/master'): string[] {
   try {
-    // Get all commits in the branch that mention this ticket
+    // Get all commits in the branch that mention this ticket, excluding merge commits
     const allCommits = execSync(
-      `git log ${targetBranch}..HEAD --grep="${ticketId}" --format=%H`,
+      `git log ${targetBranch}..HEAD --grep="${ticketId}" --format=%H --no-merges`,
       { cwd: repoPath, encoding: 'utf-8' }
     ).trim().split('\n').filter(Boolean);
 
