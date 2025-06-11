@@ -747,6 +747,63 @@ async function stepGenerateNotes(config: ReleaseNotesConfig): Promise<void> {
     }
   }
 
+  // Generate primary focus using Claude if available
+  let primaryFocus: string | undefined;
+  if (config.useAI) {
+    const claudeClient = createCachedClaudeClient(undefined, config.aiModel);
+    if (claudeClient) {
+      progress.start('Generating release primary focus...');
+      
+      // Prepare ticket summaries for Claude
+      const allTicketSummaries = [
+        ...categorizedTickets.bugFixes.map(t => ({ 
+          id: t.id, 
+          title: t.title, 
+          description: t.description, 
+          category: 'Bug Fix' 
+        })),
+        ...categorizedTickets.newFeatures.map(t => ({ 
+          id: t.id, 
+          title: t.title, 
+          description: t.description, 
+          category: 'New Feature' 
+        })),
+        ...categorizedTickets.apiChanges.map(t => ({ 
+          id: t.id, 
+          title: t.title, 
+          description: t.description, 
+          category: 'API Change' 
+        })),
+        ...categorizedTickets.uiUpdates.map(t => ({ 
+          id: t.id, 
+          title: t.title, 
+          description: t.description, 
+          category: 'UI Update' 
+        })),
+        ...categorizedTickets.refactoring.map(t => ({ 
+          id: t.id, 
+          title: t.title, 
+          description: t.description, 
+          category: 'Refactoring' 
+        })),
+        ...categorizedTickets.other.map(t => ({ 
+          id: t.id, 
+          title: t.title, 
+          description: t.description, 
+          category: 'Other' 
+        }))
+      ];
+      
+      try {
+        primaryFocus = await claudeClient.generateReleasePrimaryFocus(allTicketSummaries);
+        progress.succeed(`Primary focus: ${primaryFocus}`);
+      } catch (error: any) {
+        progress.fail();
+        logger.debug(`Failed to generate primary focus: ${error.message}`);
+      }
+    }
+  }
+
   // Build release notes data
   const releaseData: ReleaseNotesData = {
     title: `Release Notes - ${config.releaseVersion}`,
@@ -774,7 +831,8 @@ async function stepGenerateNotes(config: ReleaseNotesConfig): Promise<void> {
       'Performance benchmarks acceptable',
       'No critical console errors'
     ],
-    commits: allCommits
+    commits: allCommits,
+    primaryFocus
   };
 
   // Generate HTML optimized for PDF output

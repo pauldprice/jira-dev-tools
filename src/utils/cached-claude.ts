@@ -231,6 +231,47 @@ Do not include testing notes or risks in this summary.`;
   async getCacheStats() {
     return this.cache.getStats();
   }
+
+  /**
+   * Override generateReleasePrimaryFocus with caching
+   */
+  async generateReleasePrimaryFocus(
+    ticketSummaries: Array<{ id: string; title: string; description?: string; category: string }>,
+    options: CachedClaudeOptions = {}
+  ): Promise<string> {
+    const cacheOpts = { ...this.cacheOptions, ...options.cache };
+    
+    // Generate cache key from ticket summaries
+    const cacheKey = this.generateCacheKey('releasePrimaryFocus', {
+      ticketSummaries,
+      model: this.model,
+      temperature: 0.3,
+      max_tokens: 50
+    });
+
+    // Check cache
+    if (cacheOpts.enabled !== false) {
+      const cached = await this.cache.get<string>(cacheKey, cacheOpts.ttl);
+      if (cached) {
+        if (this.debug) logger.info(`Claude cache hit: generateReleasePrimaryFocus`);
+        return cached;
+      }
+    }
+
+    // Make actual API call
+    const result = await super.generateReleasePrimaryFocus(ticketSummaries);
+
+    // Cache result
+    if (cacheOpts.enabled !== false) {
+      await this.cache.set(cacheKey, result, {
+        method: 'generateReleasePrimaryFocus',
+        model: this.model,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    return result;
+  }
 }
 
 /**

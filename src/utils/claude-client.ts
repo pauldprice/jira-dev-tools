@@ -313,6 +313,53 @@ Do not include testing notes or risks in this summary.`;
     
     return notes;
   }
+
+  /**
+   * Generate a primary focus summary for the entire release
+   */
+  async generateReleasePrimaryFocus(
+    ticketSummaries: Array<{ id: string; title: string; description?: string; category: string }>
+  ): Promise<string> {
+    const prompt = `Based on these tickets being released, provide a concise PRIMARY FOCUS for this release (maximum 5-6 words). 
+
+Tickets:
+${ticketSummaries.map(t => `- ${t.id} (${t.category}): ${t.title}${t.description ? ' - ' + t.description : ''}`).join('\n')}
+
+Instructions:
+- Analyze all tickets to identify the main theme or focus
+- Return ONLY the focus phrase (e.g., "User Experience & Performance Improvements")
+- Be specific but concise (5-6 words max)
+- Focus on what matters most to stakeholders
+- Avoid generic terms like "General Maintenance"`;
+
+    try {
+      const message = await this.client.messages.create({
+        model: this.model,
+        max_tokens: 50,
+        temperature: 0.3,
+        system: 'You are a technical writer creating concise release summaries. Return only the requested focus phrase, nothing else.',
+        messages: [
+          {
+            role: 'user',
+            content: prompt
+          }
+        ]
+      });
+
+      const focus = message.content[0].type === 'text' ? message.content[0].text.trim() : 'Release Improvements';
+      
+      // Ensure it's not too long
+      const words = focus.split(' ');
+      if (words.length > 6) {
+        return words.slice(0, 6).join(' ');
+      }
+      
+      return focus;
+    } catch (error: any) {
+      logger.debug(`Failed to generate release focus: ${error.message}`);
+      return 'Release Improvements';
+    }
+  }
 }
 
 // Factory function

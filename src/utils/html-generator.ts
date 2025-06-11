@@ -30,6 +30,7 @@ export interface ReleaseNotesData {
   };
   testingGuidelines: string[];
   commits: CommitInfo[];
+  primaryFocus?: string;
 }
 
 export interface TicketInfo {
@@ -530,7 +531,7 @@ export class HtmlGenerator {
             <ul style="line-height: 1.8;">
                 <li><strong>Total Changes:</strong> ${data.stats.totalTickets} tickets, ${data.stats.totalCommits} commits</li>
                 <li><strong>Risk Level:</strong> ${this.getRiskLevelSummary(data)}</li>
-                <li><strong>Primary Focus:</strong> ${this.getPrimaryFocus(data)}</li>
+                <li><strong>Primary Focus:</strong> ${data.primaryFocus || this.getPrimaryFocus(data)}</li>
             </ul>
         </section>
     `;
