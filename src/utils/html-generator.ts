@@ -58,7 +58,7 @@ export class HtmlGenerator {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${data.title} - ${data.date}</title>
     <style>
-        ${this.getOptimizedStyles()}
+        ${this.getOptimizedStyles(data.version)}
     </style>
 </head>
 <body>
@@ -74,7 +74,7 @@ export class HtmlGenerator {
 </html>`;
   }
 
-  private static getOptimizedStyles(): string {
+  private static getOptimizedStyles(version: string): string {
     return `
         /* Reset and base styles */
         * {
@@ -429,30 +429,31 @@ export class HtmlGenerator {
             .no-print {
                 display: none !important;
             }
-            
-            /* Page setup */
-            @page {
-                size: A4;
-                margin: 2cm;
-            }
-            
-            @page :first {
-                margin-top: 0;
-            }
         }
         
-        /* Page numbers for PDF */
+        /* Page setup for PDF */
         @page {
+            size: A4;
+            margin: 2.5cm 2cm 2cm 2cm; /* top right bottom left */
+            
+            @top-center {
+                content: "Release Notes: ${version}";
+                font-size: 9pt;
+                color: #7f8c8d;
+                padding-bottom: 0.5cm;
+            }
+            
             @bottom-right {
                 content: counter(page) " of " counter(pages);
                 font-size: 9pt;
                 color: #7f8c8d;
             }
-            
+        }
+        
+        @page :first {
+            margin-top: 0;
             @top-center {
-                content: "Release Notes - ${new Date().toLocaleDateString()}";
-                font-size: 9pt;
-                color: #7f8c8d;
+                content: none; /* No header on first page */
             }
         }
     `;
