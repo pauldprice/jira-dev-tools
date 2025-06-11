@@ -832,7 +832,8 @@ async function stepGenerateNotes(config: ReleaseNotesConfig): Promise<void> {
       'No critical console errors'
     ],
     commits: allCommits,
-    primaryFocus
+    primaryFocus,
+    jiraBaseUrl: appConfig.get('JIRA_BASE_URL')
   };
 
   // Generate HTML optimized for PDF output

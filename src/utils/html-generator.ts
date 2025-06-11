@@ -31,6 +31,7 @@ export interface ReleaseNotesData {
   testingGuidelines: string[];
   commits: CommitInfo[];
   primaryFocus?: string;
+  jiraBaseUrl?: string;
 }
 
 export interface TicketInfo {
@@ -51,7 +52,12 @@ export interface CommitInfo {
 }
 
 export class HtmlGenerator {
+  private static jiraBaseUrl: string = '';
+  
   static generateReleaseNotes(data: ReleaseNotesData): string {
+    // Store JIRA base URL for use in ticket link generation
+    this.jiraBaseUrl = data.jiraBaseUrl || process.env.JIRA_BASE_URL || '';
+    
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -231,6 +237,25 @@ export class HtmlGenerator {
         
         .summary-table tr:nth-child(even) {
             background: #fafafa;
+        }
+        
+        /* Link styles */
+        a {
+            color: #2980b9;
+            text-decoration: none;
+        }
+        
+        a:hover {
+            text-decoration: underline;
+        }
+        
+        .ticket-id a {
+            font-weight: 700;
+            color: inherit;
+        }
+        
+        .ticket-id a:hover {
+            color: #2980b9;
         }
         
         /* Ticket details */
@@ -658,7 +683,7 @@ export class HtmlGenerator {
                 <tbody>
                     ${allTickets.map(ticket => `
                         <tr>
-                            <td><strong>${ticket.id}</strong></td>
+                            <td><strong><a href="#${ticket.id}" style="color: #2c3e50; text-decoration: none;">${ticket.id}</a></strong></td>
                             <td>${ticket.title}</td>
                             <td>${ticket.category}</td>
                             <td>${ticket.assignee || 'Unassigned'}</td>
@@ -714,11 +739,11 @@ export class HtmlGenerator {
     const categoryIcon = this.getCategoryIcon(ticket);
 
     return `
-        <div class="ticket">
+        <div class="ticket" id="${ticket.id}">
             <div class="ticket-header">
                 <div>
                     <span class="category-icon">${categoryIcon}</span>
-                    <span class="ticket-id">${ticket.id}</span>
+                    <span class="ticket-id"><a href="${this.getJiraUrl(ticket.id)}" target="_blank" style="color: #2c3e50; text-decoration: none;">${ticket.id}</a></span>
                     <span class="ticket-title">${ticket.title}</span>
                 </div>
                 <div class="ticket-meta">
@@ -812,11 +837,12 @@ export class HtmlGenerator {
                 <tbody>
                     ${data.commits.slice(0, 50).map(commit => {
                         const ticketMatch = commit.message.match(/([A-Z]+-\d+)/);
+                        const ticketId = ticketMatch ? ticketMatch[1] : null;
                         return `
                             <tr>
                                 <td class="commit-hash">${commit.hash.substring(0, 8)}</td>
                                 <td>${commit.message}</td>
-                                <td>${ticketMatch ? ticketMatch[1] : '-'}</td>
+                                <td>${ticketId ? `<a href="#${ticketId}" style="color: #2c3e50;">${ticketId}</a>` : '-'}</td>
                             </tr>
                         `;
                     }).join('')}
@@ -825,5 +851,11 @@ export class HtmlGenerator {
             ${data.commits.length > 50 ? `<p><em>... and ${data.commits.length - 50} more commits</em></p>` : ''}
         </section>
     `;
+  }
+
+  private static getJiraUrl(ticketId: string): string {
+    // Use stored JIRA base URL or fallback
+    const jiraBaseUrl = this.jiraBaseUrl || process.env.JIRA_BASE_URL || 'https://jira.example.com';
+    return `${jiraBaseUrl}/browse/${ticketId}`;
   }
 }
