@@ -745,6 +745,16 @@ async function stepGenerateNotes(config: ReleaseNotesConfig): Promise<void> {
         }
       }
 
+      // Get diff stats from code analysis
+      let diffStats = undefined;
+      if (codeAnalysis[ticketId]?.diff?.stats) {
+        const stats = codeAnalysis[ticketId].diff.stats;
+        diffStats = {
+          additions: stats.insertions || 0,
+          deletions: stats.deletions || 0
+        };
+      }
+
       const ticketInfo: TicketInfo = {
         id: ticketId,
         title: details?.title || ticketCommits[0]?.message || 'No title',
@@ -753,7 +763,8 @@ async function stepGenerateNotes(config: ReleaseNotesConfig): Promise<void> {
         description,
         commits: ticketCommits,
         testingNotes,
-        risks
+        risks,
+        diffStats
       };
 
       categorizedTickets[mappedCategory].push(ticketInfo);

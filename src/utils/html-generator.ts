@@ -44,6 +44,10 @@ export interface TicketInfo {
   commits: CommitInfo[];
   testingNotes?: string[];
   risks?: string[];
+  diffStats?: {
+    additions: number;
+    deletions: number;
+  };
 }
 
 export interface CommitInfo {
@@ -298,6 +302,7 @@ export class HtmlGenerator {
         .ticket-meta {
             font-size: 9pt;
             color: #7f8c8d;
+            white-space: nowrap;
         }
         
         .ticket-summary {
@@ -512,6 +517,25 @@ export class HtmlGenerator {
     const total = data.stats.totalTickets;
     const criticalCount = data.stats.bugFixes;
     const percentBugFixes = total > 0 ? Math.round((criticalCount / total) * 100) : 0;
+    
+    // Calculate total lines changed
+    const allTickets = [
+      ...data.categories.bugFixes,
+      ...data.categories.newFeatures,
+      ...data.categories.apiChanges,
+      ...data.categories.uiUpdates,
+      ...data.categories.refactoring,
+      ...data.categories.other
+    ];
+    
+    let totalAdditions = 0;
+    let totalDeletions = 0;
+    allTickets.forEach(ticket => {
+      if (ticket.diffStats) {
+        totalAdditions += ticket.diffStats.additions;
+        totalDeletions += ticket.diffStats.deletions;
+      }
+    });
 
     return `
         <section class="executive-summary" style="page-break-after: always;">
@@ -532,19 +556,16 @@ export class HtmlGenerator {
                 </div>
             </div>
             
-            <h2>Release Highlights</h2>
+            <h2>Release Highlights & Quick Reference</h2>
             <ul>
                 <li><strong>${percentBugFixes}%</strong> of changes are bug fixes, improving system stability</li>
                 ${data.stats.newFeatures > 0 ? `<li><strong>${data.stats.newFeatures}</strong> new features enhance user capabilities</li>` : ''}
                 ${data.stats.apiChanges > 0 ? `<li><strong>${data.stats.apiChanges}</strong> API changes require integration review</li>` : ''}
-                <li>All changes have passed acceptance testing</li>
-            </ul>
-            
-            <h2>Quick Reference</h2>
-            <ul>
+                <li><strong>Code Impact:</strong> +${totalAdditions.toLocaleString()} lines added, -${totalDeletions.toLocaleString()} lines removed</li>
                 <li><strong>Risk Distribution:</strong> ${this.getRiskLevelSummary(data)}</li>
                 <li><strong>Primary Focus:</strong> ${data.primaryFocus || this.getPrimaryFocus(data)}</li>
                 <li><strong>Total Commits:</strong> ${data.stats.totalCommits}</li>
+                <li>All changes have passed acceptance testing</li>
             </ul>
             
             <h2>Table of Contents</h2>
@@ -740,6 +761,12 @@ export class HtmlGenerator {
     
     // Determine category icon
     const categoryIcon = this.getCategoryIcon(ticket);
+    
+    // Format diff stats
+    let diffStats = '';
+    if (ticket.diffStats) {
+      diffStats = ` | +${ticket.diffStats.additions} -${ticket.diffStats.deletions}`;
+    }
 
     return `
         <div class="ticket" id="${ticket.id}">
@@ -750,7 +777,7 @@ export class HtmlGenerator {
                     <span class="ticket-title">${ticket.title}</span>
                 </div>
                 <div class="ticket-meta">
-                    ${ticket.assignee || 'Unassigned'} | ${ticket.commits.length} commits
+                    ${ticket.assignee || 'Unassigned'} | ${ticket.commits.length} commits${diffStats}
                 </div>
             </div>
             
