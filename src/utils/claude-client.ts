@@ -12,11 +12,21 @@ export interface TicketAnalysis {
 
 export class ClaudeClient {
   private client: Anthropic;
+  private model: string;
   
-  constructor(apiKey: string) {
+  constructor(apiKey: string, model?: string) {
     this.client = new Anthropic({
       apiKey,
     });
+    
+    // Map model aliases to actual model names
+    const modelMap: Record<string, string> = {
+      'haiku': 'claude-3-haiku-20240307',
+      'sonnet': 'claude-3-5-sonnet-20241022',
+      'opus': 'claude-3-opus-20240229'
+    };
+    
+    this.model = model ? (modelMap[model] || model) : 'claude-3-5-sonnet-20241022';
   }
   
   /**
@@ -30,7 +40,7 @@ export class ClaudeClient {
       const prompt = this.buildAnalysisPrompt(diff, jiraData);
       
       const message = await this.client.messages.create({
-        model: 'claude-3-haiku-20240307',
+        model: this.model,
         max_tokens: 2000,
         temperature: 0.3,
         system: `You are a senior software engineer reviewing code changes for a release notes document. Your task is to:
@@ -58,7 +68,7 @@ Example bad testing note: "Test the feature thoroughly"`,
       
       // Parse the response
       const response = message.content[0].type === 'text' ? message.content[0].text : '';
-      return this.parseAnalysisResponse(response);
+      return this.parseAnalysisResponse(response, diff);
       
     } catch (error: any) {
       logger.error(`Claude API error: ${error.message}`);
@@ -66,7 +76,7 @@ Example bad testing note: "Test the feature thoroughly"`,
       return {
         summary: jiraData?.title || `Changes for ticket ${diff.ticketId}`,
         technicalChanges: [`${diff.stats.filesChanged} files changed (+${diff.stats.insertions}, -${diff.stats.deletions})`],
-        testingNotes: ['Verify all changes work as expected', 'Test for regressions'],
+        testingNotes: this.generateFallbackTestingNotes('', diff),
         risks: []
       };
     }
@@ -102,7 +112,7 @@ Please write a 2-3 sentence summary that:
 Do not include testing notes or risks in this summary.`;
 
       const message = await this.client.messages.create({
-        model: 'claude-3-haiku-20240307',
+        model: this.model,
         max_tokens: 500,
         temperature: 0.3,
         messages: [
@@ -184,7 +194,7 @@ Do not include testing notes or risks in this summary.`;
     return parts.join('\n');
   }
   
-  private parseAnalysisResponse(response: string): TicketAnalysis {
+  private parseAnalysisResponse(response: string, diff: CodeDiff): TicketAnalysis {
     // Default structure
     const analysis: TicketAnalysis = {
       summary: '',
@@ -207,6 +217,8 @@ Do not include testing notes or risks in this summary.`;
           .filter(line => line.match(/^[-•*]\s+/) || line.match(/^\d+\.\s+/))
           .map(line => line.replace(/^[-•*\d.]\s+/, '').trim())
           .filter(line => !line.match(/^(\d+\.\s*)?(technical changes|key changes|key technical changes):/i))
+          .filter(line => !line.match(/^\d+\.\s*[A-Z\s]+:?$/)) // Remove section headers
+          .filter(line => !line.match(/^[A-Z\s]+:$/)) // Remove standalone headers
           .filter(line => line.length > 0);
       }
       else if (section.toLowerCase().includes('testing')) {
@@ -214,6 +226,8 @@ Do not include testing notes or risks in this summary.`;
           .filter(line => line.match(/^[-•*]\s+/) || line.match(/^\d+\.\s+/))
           .map(line => line.replace(/^[-•*\d.]\s+/, '').trim())
           .filter(line => !line.match(/^(\d+\.\s*)?(testing|testing notes|specific testing notes):/i))
+          .filter(line => !line.match(/^\d+\.\s*[A-Z\s]+:?$/)) // Remove section headers
+          .filter(line => !line.match(/^[A-Z\s]+:$/)) // Remove standalone headers
           .filter(line => line.length > 0);
       }
       else if (section.toLowerCase().includes('risk') || section.toLowerCase().includes('concern')) {
@@ -221,6 +235,8 @@ Do not include testing notes or risks in this summary.`;
           .filter(line => line.match(/^[-•*]\s+/) || line.match(/^\d+\.\s+/))
           .map(line => line.replace(/^[-•*\d.]\s+/, '').trim())
           .filter(line => !line.match(/^(\d+\.\s*)?(risks|concerns|potential risks|risks and concerns):/i))
+          .filter(line => !line.match(/^\d+\.\s*[A-Z\s]+:?$/)) // Remove section headers
+          .filter(line => !line.match(/^[A-Z\s]+:$/)) // Remove standalone headers
           .filter(line => line.length > 0);
       }
     });
@@ -235,19 +251,72 @@ Do not include testing notes or risks in this summary.`;
     }
     
     if (analysis.testingNotes.length === 0) {
-      analysis.testingNotes = [
-        'Verify the feature works as described',
-        'Test edge cases',
-        'Check for regressions'
-      ];
+      // Generate more specific fallback testing notes based on the changes
+      analysis.testingNotes = this.generateFallbackTestingNotes(response, diff);
     }
     
     return analysis;
   }
+  
+  private generateFallbackTestingNotes(_aiResponse: string, diff: CodeDiff): string[] {
+    const notes: string[] = [];
+    
+    // Analyze file types changed
+    const hasUIChanges = diff.files.some(f => 
+      f.path.includes('/ui/') || f.path.includes('.tsx') || f.path.includes('.jsx') || f.path.includes('.vue')
+    );
+    const hasAPIChanges = diff.files.some(f => 
+      f.path.includes('/api/') || f.path.includes('/routes/') || f.path.includes('controller')
+    );
+    const hasDBChanges = diff.files.some(f => 
+      f.path.includes('.sql') || f.path.includes('/migration/') || f.path.includes('/database/')
+    );
+    const hasTestChanges = diff.files.some(f => 
+      f.path.includes('.test.') || f.path.includes('.spec.') || f.path.includes('/test/')
+    );
+    
+    // Generate specific notes based on changes
+    if (hasUIChanges) {
+      notes.push('Test all affected UI components for visual regressions');
+      notes.push('Verify user interactions work correctly in the modified screens');
+      notes.push('Check responsive behavior on mobile devices');
+    }
+    
+    if (hasAPIChanges) {
+      notes.push('Test all modified API endpoints with various payloads');
+      notes.push('Verify error handling for invalid requests');
+      notes.push('Check backward compatibility for existing integrations');
+    }
+    
+    if (hasDBChanges) {
+      notes.push('Verify database migrations run successfully');
+      notes.push('Test data integrity after migration');
+      notes.push('Check query performance for any new database operations');
+    }
+    
+    if (hasTestChanges) {
+      notes.push('Ensure all new and modified tests pass');
+      notes.push('Verify test coverage meets requirements');
+    }
+    
+    // Add notes based on file count
+    if (diff.stats.filesChanged > 10) {
+      notes.push('Perform comprehensive regression testing due to extensive changes');
+    }
+    
+    // If still no notes, add generic ones
+    if (notes.length === 0) {
+      notes.push('Test the specific functionality mentioned in the ticket');
+      notes.push('Verify no existing features are broken');
+      notes.push('Check edge cases relevant to the changes');
+    }
+    
+    return notes;
+  }
 }
 
 // Factory function
-export function createClaudeClient(apiKey?: string): ClaudeClient | null {
+export function createClaudeClient(apiKey?: string, model?: string): ClaudeClient | null {
   const key = apiKey || process.env.ANTHROPIC_API_KEY;
   
   if (!key) {
@@ -255,5 +324,5 @@ export function createClaudeClient(apiKey?: string): ClaudeClient | null {
     return null;
   }
   
-  return new ClaudeClient(key);
+  return new ClaudeClient(key, model);
 }

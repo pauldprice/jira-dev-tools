@@ -54,87 +54,126 @@ export async function getTicketCodeDiff(
       return null;
     }
 
-    // Get the merge base to find where this branch diverged
-    const mergeBase = execSync(
-      `git merge-base ${targetBranch} ${commits[commits.length - 1]}`,
-      { cwd: repoPath, encoding: 'utf-8' }
-    ).trim();
-
-    // Get the combined diff for all changes
-    const rawDiff = execSync(
-      `git diff ${mergeBase}..${commits[0]}`,
-      { cwd: repoPath, encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 } // 10MB buffer
-    );
-
-    // Get statistics
-    const stats = execSync(
-      `git diff --shortstat ${mergeBase}..${commits[0]}`,
-      { cwd: repoPath, encoding: 'utf-8' }
-    ).trim();
-
-    // Parse stats
-    const statsMatch = stats.match(/(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?/);
-    const filesChanged = parseInt(statsMatch?.[1] || '0');
-    const insertions = parseInt(statsMatch?.[2] || '0');
-    const deletions = parseInt(statsMatch?.[3] || '0');
-
-    // Get list of changed files with their diffs
-    const fileList = execSync(
-      `git diff --name-status ${mergeBase}..${commits[0]}`,
-      { cwd: repoPath, encoding: 'utf-8' }
-    ).trim().split('\n').filter(Boolean);
-
-    const files: FileDiff[] = [];
-
-    for (const fileLine of fileList) {
-      const [status, ...pathParts] = fileLine.split('\t');
-      const path = pathParts.join('\t');
-      
-      let changeType: FileDiff['changeType'] = 'modified';
-      if (status === 'A') changeType = 'added';
-      else if (status === 'D') changeType = 'deleted';
-      else if (status.startsWith('R')) changeType = 'renamed';
-
-      // Get individual file diff
-      let fileDiff = '';
-      try {
-        if (changeType !== 'deleted') {
-          fileDiff = execSync(
-            `git diff ${mergeBase}..${commits[0]} -- "${path}"`,
-            { cwd: repoPath, encoding: 'utf-8', maxBuffer: 5 * 1024 * 1024 } // 5MB per file
+    // Create a temporary patch file with only this ticket's changes
+    const patchFile = `/tmp/ticket-${ticketId}-${Date.now()}.patch`;
+    
+    try {
+      // Generate patches for each commit
+      const patches: string[] = [];
+      for (const commit of commits) {
+        try {
+          const patch = execSync(
+            `git format-patch -1 --stdout ${commit}`,
+            { cwd: repoPath, encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 }
           );
+          patches.push(patch);
+        } catch (error) {
+          logger.debug(`Could not get patch for commit ${commit}`);
         }
-      } catch (error) {
-        logger.debug(`Could not get diff for file ${path}`);
       }
-
-      // Get file stats
-      const fileStats = execSync(
-        `git diff --numstat ${mergeBase}..${commits[0]} -- "${path}"`,
-        { cwd: repoPath, encoding: 'utf-8' }
-      ).trim();
-
-      const [additions = '0', deletions = '0'] = fileStats.split('\t');
-
-      files.push({
-        path,
-        changeType,
-        additions: parseInt(additions) || 0,
-        deletions: parseInt(deletions) || 0,
-        diff: fileDiff
-      });
+      
+      // Get combined stats from all commits
+      let totalFiles = 0;
+      let totalInsertions = 0;
+      let totalDeletions = 0;
+      const fileMap = new Map<string, FileDiff>();
+      
+      for (const commit of commits) {
+        try {
+          // Get stats for this commit
+          const stats = execSync(
+            `git show --stat --format="" ${commit}`,
+            { cwd: repoPath, encoding: 'utf-8' }
+          ).trim();
+          
+          // Parse file changes from stat output
+          const lines = stats.split('\n').filter(line => line.includes('|'));
+          
+          for (const line of lines) {
+            const match = line.match(/^\s*(.+?)\s*\|\s*(\d+)\s*([\+\-]+)/);
+            if (match) {
+              const [, filePath, , diffBar] = match;
+              const additions = (diffBar.match(/\+/g) || []).length;
+              const deletions = (diffBar.match(/-/g) || []).length;
+              
+              const existing = fileMap.get(filePath) || {
+                path: filePath.trim(),
+                changeType: 'modified' as FileDiff['changeType'],
+                additions: 0,
+                deletions: 0,
+                diff: ''
+              };
+              
+              fileMap.set(filePath.trim(), {
+                ...existing,
+                additions: existing.additions + additions,
+                deletions: existing.deletions + deletions
+              });
+            }
+          }
+          
+          // Get simple stats
+          const statSummary = execSync(
+            `git show --shortstat --format="" ${commit}`,
+            { cwd: repoPath, encoding: 'utf-8' }
+          ).trim();
+          
+          const statsMatch = statSummary.match(/(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?/);
+          if (statsMatch) {
+            totalInsertions += parseInt(statsMatch[2] || '0');
+            totalDeletions += parseInt(statsMatch[3] || '0');
+          }
+        } catch (error) {
+          logger.debug(`Could not get stats for commit ${commit}`);
+        }
+      }
+      
+      // Convert map to array and get actual diffs for important files
+      const files: FileDiff[] = [];
+      const importantExtensions = /\.(ts|tsx|js|jsx|vue|py|go|java|cs|rb|php|sql)$/;
+      
+      for (const [filePath, fileDiff] of fileMap) {
+        // For important files, try to get a combined diff
+        let diff = '';
+        if (importantExtensions.test(filePath) && files.length < 10) {
+          try {
+            // Get the diff by showing all ticket commits for this file
+            diff = execSync(
+              `git show ${commits.join(' ')} -- "${filePath}" | grep -E "^[+-]" | head -200 || true`,
+              { cwd: repoPath, encoding: 'utf-8', maxBuffer: 1 * 1024 * 1024 }
+            );
+          } catch (error) {
+            logger.debug(`Could not get diff for ${filePath}`);
+          }
+        }
+        
+        files.push({
+          ...fileDiff,
+          path: filePath,
+          diff
+        });
+      }
+      
+      totalFiles = files.length;
+      
+      return {
+        ticketId,
+        files,
+        stats: {
+          filesChanged: totalFiles,
+          insertions: totalInsertions,
+          deletions: totalDeletions
+        },
+        rawDiff: patches.join('\n---\n')
+      };
+    } finally {
+      // Clean up temp file if created
+      try {
+        execSync(`rm -f ${patchFile}`, { cwd: repoPath });
+      } catch (error) {
+        // Ignore cleanup errors
+      }
     }
-
-    return {
-      ticketId,
-      files,
-      stats: {
-        filesChanged,
-        insertions,
-        deletions
-      },
-      rawDiff
-    };
   } catch (error: any) {
     logger.error(`Failed to get diff for ticket ${ticketId}: ${error.message}`);
     return null;

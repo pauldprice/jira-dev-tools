@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
-import { logger, progress, FileSystem, config as appConfig, HtmlGenerator, fetchJiraTicket, getTicketCodeDiff, createClaudeClient } from '../utils';
+import { logger, progress, FileSystem, config as appConfig, HtmlGenerator, fetchJiraTicket, getTicketCodeDiff, createClaudeClient, ParallelProcessor } from '../utils';
 import type { ReleaseNotesData, TicketInfo, CommitInfo, JiraCredentials } from '../utils';
 import simpleGit, { SimpleGit } from 'simple-git';
 import * as path from 'path';
@@ -17,6 +17,7 @@ interface ReleaseNotesConfig {
   jiraProject?: string;
   fetchJiraDetails: boolean;
   useAI: boolean;
+  aiModel?: string;
 }
 
 const program = new Command();
@@ -38,6 +39,7 @@ program
   .option('--no-jira', 'skip fetching Jira ticket details')
   .option('--no-ai', 'skip AI-powered code analysis')
   .option('--jira-project <prefix>', 'Jira project prefix (e.g., APP)', 'APP')
+  .option('--ai-model <model>', 'Claude AI model to use (haiku, sonnet, opus)', 'sonnet')
   .action(async (options) => {
     try {
       logger.header('Release Notes Generator v2.0');
@@ -61,6 +63,7 @@ program
         jiraProject: options.jiraProject,
         fetchJiraDetails: !options.noJira,
         useAI: !options.noAi,
+        aiModel: options.aiModel,
       };
 
       logger.info(`Repository: ${config.repoPath}`);
@@ -400,17 +403,23 @@ async function stepFetchTicketDetails(config: ReleaseNotesConfig): Promise<void>
   }
 
   const total = tickets.length;
-  let current = 0;
   let successful = 0;
 
   progress.start(`Fetching details for ${total} tickets...`);
 
-  for (const ticket of tickets) {
-    current++;
-    progress.update(`Fetching ${current}/${total}: ${ticket}`);
+  // Create parallel processor for Jira fetching
+  const processor = new ParallelProcessor({
+    maxConcurrency: 5, // Jira API can handle more concurrent requests
+    delayBetweenBatches: 200, // Smaller delay for Jira
+    onProgress: (completed, total) => {
+      progress.update(`Fetching ${completed}/${total} tickets`);
+    }
+  });
 
-    try {
-      // Use the internal Jira client directly
+  // Fetch tickets in parallel
+  const results = await processor.processWithSlidingWindow(
+    tickets,
+    async (ticket) => {
       const ticketData = await fetchJiraTicket(
         ticket, 
         jiraConfig as JiraCredentials,
@@ -421,17 +430,25 @@ async function stepFetchTicketDetails(config: ReleaseNotesConfig): Promise<void>
         }
       );
       
-      ticketDetails[ticket] = ticketData;
-      successful++;
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.errorMessages?.join(', ') || 
-                         error.message || 
-                         'Unknown error';
+      return { ticket, data: ticketData };
+    }
+  );
+
+  // Collect results
+  results.forEach((result, index) => {
+    const ticket = tickets[index];
+    
+    if (result instanceof Error) {
+      const errorMessage = result.message || 'Unknown error';
       if (config.verbose) {
         logger.warn(`Failed to fetch ${ticket}: ${errorMessage}`);
       }
+    } else if (result) {
+      const { ticket, data } = result as any;
+      ticketDetails[ticket] = data;
+      successful++;
     }
-  }
+  });
 
   await FileSystem.writeJSON(outputFile, ticketDetails);
   
@@ -455,12 +472,16 @@ async function stepAnalyzeCode(_git: SimpleGit, config: ReleaseNotesConfig): Pro
   }
 
   // Check if Claude is available
-  const claudeClient = createClaudeClient();
+  const claudeClient = createClaudeClient(undefined, config.aiModel);
   if (!claudeClient) {
     logger.warn('Claude API not configured. Skipping AI analysis.');
     logger.info('Set ANTHROPIC_API_KEY to enable AI-powered analysis.');
     await FileSystem.writeJSON(outputFile, {});
     return;
+  }
+  
+  if (config.verbose && config.aiModel) {
+    logger.info(`Using AI model: ${config.aiModel}`);
   }
 
   const tickets = (await FileSystem.readFile(ticketsFile)).split('\n').filter(Boolean);
@@ -468,16 +489,23 @@ async function stepAnalyzeCode(_git: SimpleGit, config: ReleaseNotesConfig): Pro
   const codeAnalysis: Record<string, any> = {};
   
   const total = tickets.length;
-  let current = 0;
   let successful = 0;
 
   progress.start(`Analyzing code for ${total} tickets...`);
 
-  for (const ticket of tickets) {
-    current++;
-    progress.update(`Analyzing ${current}/${total}: ${ticket}`);
+  // Create parallel processor with progress updates
+  const processor = new ParallelProcessor({
+    maxConcurrency: 3, // Process 3 tickets at a time to avoid rate limits
+    delayBetweenBatches: 500, // 500ms delay between batches
+    onProgress: (completed, total) => {
+      progress.update(`Analyzing ${completed}/${total} tickets`);
+    }
+  });
 
-    try {
+  // Process tickets in parallel
+  const results = await processor.processWithSlidingWindow(
+    tickets,
+    async (ticket, _index) => {
       // Get code diff for this ticket
       const diff = await getTicketCodeDiff(config.repoPath, ticket, config.targetBranch);
       
@@ -485,7 +513,7 @@ async function stepAnalyzeCode(_git: SimpleGit, config: ReleaseNotesConfig): Pro
         if (config.verbose) {
           logger.debug(`No code diff found for ${ticket} - this ticket may not have commits in this branch`);
         }
-        continue;
+        return null;
       }
 
       // Get Jira data if available
@@ -500,27 +528,39 @@ async function stepAnalyzeCode(_git: SimpleGit, config: ReleaseNotesConfig): Pro
         finalSummary = await claudeClient.generateTicketSummary(ticket, jiraData, analysis);
       }
 
-      codeAnalysis[ticket] = {
-        diff: {
-          stats: diff.stats,
-          filesChanged: diff.files.map(f => ({
-            path: f.path,
-            changeType: f.changeType,
-            additions: f.additions,
-            deletions: f.deletions
-          }))
-        },
-        analysis: {
-          ...analysis,
-          summary: finalSummary
+      return {
+        ticket,
+        data: {
+          diff: {
+            stats: diff.stats,
+            filesChanged: diff.files.map(f => ({
+              path: f.path,
+              changeType: f.changeType,
+              additions: f.additions,
+              deletions: f.deletions
+            }))
+          },
+          analysis: {
+            ...analysis,
+            summary: finalSummary
+          }
         }
       };
-      
-      successful++;
-    } catch (error: any) {
-      logger.debug(`Failed to analyze ${ticket}: ${error.message}`);
     }
-  }
+  );
+
+  // Collect results
+  results.forEach((result, index) => {
+    const ticket = tickets[index];
+    
+    if (result instanceof Error) {
+      logger.debug(`Failed to analyze ${ticket}: ${result.message}`);
+    } else if (result && result !== null) {
+      const { ticket, data } = result as any;
+      codeAnalysis[ticket] = data;
+      successful++;
+    }
+  });
 
   await FileSystem.writeJSON(outputFile, codeAnalysis);
   

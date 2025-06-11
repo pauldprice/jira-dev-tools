@@ -8,3 +8,4 @@ export * from './html-generator';
 export * from './jira-client';
 export * from './git-diff';
 export * from './claude-client';
+export * from './parallel-processor';
