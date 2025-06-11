@@ -66,7 +66,6 @@ export class HtmlGenerator {
     <div class="container">
         ${this.generateCoverPage(data)}
         ${this.generateExecutiveSummary(data)}
-        ${this.generateTableOfContents(data)}
         ${this.generateTicketSummaryTable(data)}
         ${this.generateTicketDetails(data)}
         ${this.generateAppendix(data)}
@@ -481,7 +480,7 @@ export class HtmlGenerator {
     const percentBugFixes = total > 0 ? Math.round((criticalCount / total) * 100) : 0;
 
     return `
-        <section class="executive-summary">
+        <section class="executive-summary" style="page-break-after: always;">
             <h1>Executive Summary</h1>
             
             <div class="summary-grid">
@@ -509,33 +508,28 @@ export class HtmlGenerator {
             
             <h2>Risk Assessment</h2>
             <p>This release contains ${this.assessRiskLevel(data)} based on the scope and nature of changes.</p>
+            
+            <h2>Quick Reference</h2>
+            <ul>
+                <li><strong>Risk Distribution:</strong> ${this.getRiskLevelSummary(data)}</li>
+                <li><strong>Primary Focus:</strong> ${data.primaryFocus || this.getPrimaryFocus(data)}</li>
+                <li><strong>Total Commits:</strong> ${data.stats.totalCommits}</li>
+            </ul>
+            
+            <h2>Table of Contents</h2>
+            <ol style="line-height: 1.8;">
+                <li>Executive Summary (this page)</li>
+                <li>Change Summary Table</li>
+                ${data.categories.bugFixes.length > 0 ? '<li>Critical Bug Fixes</li>' : ''}
+                ${data.categories.newFeatures.length > 0 ? '<li>New Features</li>' : ''}
+                ${data.categories.apiChanges.length > 0 ? '<li>API Changes</li>' : ''}
+                ${(data.categories.uiUpdates.length + data.categories.refactoring.length + data.categories.other.length) > 0 ? '<li>Other Changes</li>' : ''}
+                <li>Appendix: Full Commit List</li>
+            </ol>
         </section>
     `;
   }
 
-  private static generateTableOfContents(data: ReleaseNotesData): string {
-    return `
-        <section class="table-of-contents" style="page-break-after: always; padding: 2em;">
-            <h2>Table of Contents</h2>
-            <ol style="line-height: 2;">
-                <li><a href="#executive-summary">Executive Summary</a> ........................... 2</li>
-                <li><a href="#change-summary">Change Summary</a> ................................... 4</li>
-                ${data.categories.bugFixes.length > 0 ? '<li><a href="#bug-fixes">Critical Bug Fixes</a> ............................... 5</li>' : ''}
-                ${data.categories.newFeatures.length > 0 ? '<li><a href="#new-features">New Features</a> ...................................... 8</li>' : ''}
-                ${data.categories.apiChanges.length > 0 ? '<li><a href="#api-changes">API Changes</a> ....................................... 9</li>' : ''}
-                ${(data.categories.uiUpdates.length + data.categories.refactoring.length + data.categories.other.length) > 0 ? '<li><a href="#other-changes">Other Changes</a> ..................................... 10</li>' : ''}
-                <li><a href="#appendix">Appendix: Full Commit List</a> ........................ 11</li>
-            </ol>
-            
-            <h3 style="margin-top: 2em;">Quick Reference</h3>
-            <ul style="line-height: 1.8;">
-                <li><strong>Total Changes:</strong> ${data.stats.totalTickets} tickets, ${data.stats.totalCommits} commits</li>
-                <li><strong>Risk Level:</strong> ${this.getRiskLevelSummary(data)}</li>
-                <li><strong>Primary Focus:</strong> ${data.primaryFocus || this.getPrimaryFocus(data)}</li>
-            </ul>
-        </section>
-    `;
-  }
 
   private static getPrimaryFocus(data: ReleaseNotesData): string {
     // Analyze all ticket descriptions to determine primary focus
