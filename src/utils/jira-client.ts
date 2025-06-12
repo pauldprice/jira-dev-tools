@@ -26,6 +26,13 @@ export interface JiraIssue {
     assignee?: any;
     attachment?: JiraAttachment[];
     labels?: string[];
+    fixVersions?: Array<{
+      self: string;
+      id: string;
+      name: string;
+      archived: boolean;
+      released: boolean;
+    }>;
   };
   changelog?: {
     histories: any[];
@@ -67,6 +74,7 @@ export interface LLMFriendlyOutput {
   reporter?: string;
   assignee?: string;
   description?: string;
+  fixVersions?: string[];
   attachments?: Array<{
     filename: string;
     url: string;
@@ -205,10 +213,15 @@ function formatForLLM(issue: JiraIssue, comments: JiraComment[], baseUrl: string
     ? timeline[timeline.length - 1]
     : null;
   
+  const fixVersionsStr = issue.fields.fixVersions?.length 
+    ? issue.fields.fixVersions.map(v => v.name).join(', ')
+    : 'None';
+  
   const summary = `# Jira Ticket ${issue.key}: ${issue.fields.summary}
 
 **Status**: ${issue.fields.status?.name || 'Unknown'}
 **Priority**: ${issue.fields.priority?.name || 'None'}
+**Fix Version(s)**: ${fixVersionsStr}
 **Reporter**: ${JiraFormatter.formatUser(issue.fields.reporter)}
 **Assignee**: ${JiraFormatter.formatUser(issue.fields.assignee)}
 
@@ -229,6 +242,7 @@ function formatForLLM(issue: JiraIssue, comments: JiraComment[], baseUrl: string
     reporter: JiraFormatter.formatUser(issue.fields.reporter),
     assignee: JiraFormatter.formatUser(issue.fields.assignee),
     description: issue.fields.description ? JiraFormatter.documentToMarkdown(issue.fields.description) : undefined,
+    fixVersions: issue.fields.fixVersions?.map(v => v.name) || [],
     attachments,
     timeline: filteredTimeline,
     summary,

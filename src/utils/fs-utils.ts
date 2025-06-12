@@ -83,4 +83,8 @@ export class FileSystem {
       mtime: stats.mtime
     };
   }
+
+  static async rename(oldPath: string, newPath: string): Promise<void> {
+    await fs.rename(oldPath, newPath);
+  }
 }

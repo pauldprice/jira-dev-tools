@@ -21,7 +21,7 @@ interface ReleaseNotesConfig {
   generatePDF: boolean;
   pdfFile?: string;
   debugLimit?: number;
-  releaseVersion: string;
+  releaseVersion?: string;
 }
 
 const program = new Command();
@@ -29,7 +29,7 @@ const program = new Command();
 program
   .name('generate-release-notes')
   .description('Generate release notes from git commits between branches')
-  .requiredOption('--version <version>', 'release version (e.g., V17.01.00)')
+  .option('--version <version>', 'release version (e.g., V17.01.00)')
   .option('-p, --repo <path>', 'path to git repository (default: current directory)', process.cwd())
   .option('-s, --source <branch>', 'source branch with new commits (default: origin/test)', 'origin/test')
   .option('-t, --target <branch>', 'target branch to compare against (default: origin/master)', 'origin/master')
@@ -61,15 +61,15 @@ program
         process.exit(1);
       }
 
-      // Generate output filename based on version if not specified
-      const outputFileName = options.output || `release_notes_${options.version}_${format(new Date(), 'yyyy-MM-dd')}.html`;
+      // We'll determine the version later if not specified
+      let temporaryFileName = 'release_notes_temp.html';
       
       const config: ReleaseNotesConfig = {
         repoPath,
         sourceBranch: options.source,
         targetBranch: options.target,
         workDir: path.join(repoPath, options.workDir),
-        outputFile: path.join(repoPath, outputFileName),
+        outputFile: path.join(repoPath, temporaryFileName),
         keepFiles: options.keep || false,
         verbose: options.verbose || false,
         jiraProject: options.jiraProject,
@@ -77,7 +77,7 @@ program
         useAI: !options.noAi,
         aiModel: options.aiModel,
         generatePDF: options.pdf || options.pdfOnly || false,
-        pdfFile: path.join(repoPath, outputFileName.replace('.html', '.pdf')),
+        pdfFile: '',  // Will be set later
         debugLimit: options.debug,
         releaseVersion: options.version,
       };
@@ -113,6 +113,41 @@ program
         await runStep(options.step, git, config);
       } else {
         await runAllSteps(git, config, options.resume);
+      }
+      
+      // Try to detect version from ticket data if not provided
+      if (!config.releaseVersion) {
+        const detectedVersion = await detectReleaseVersion(config);
+        if (detectedVersion) {
+          config.releaseVersion = detectedVersion;
+          logger.info(`Detected release version: ${detectedVersion}`);
+        }
+      }
+      
+      // Update filenames with actual version
+      if (config.releaseVersion) {
+        const outputFileName = options.output || `release_notes_${config.releaseVersion}_${format(new Date(), 'yyyy-MM-dd')}.html`;
+        const newOutputFile = path.join(repoPath, outputFileName);
+        
+        // Rename the temporary file
+        if (config.outputFile !== newOutputFile && FileSystem.exists(config.outputFile)) {
+          await FileSystem.rename(config.outputFile, newOutputFile);
+          config.outputFile = newOutputFile;
+        }
+        
+        // Update PDF filename
+        config.pdfFile = path.join(repoPath, outputFileName.replace('.html', '.pdf'));
+      } else {
+        logger.warn('No release version detected. Using generic filename.');
+        const outputFileName = options.output || `release_notes_${format(new Date(), 'yyyy-MM-dd')}.html`;
+        const newOutputFile = path.join(repoPath, outputFileName);
+        
+        if (config.outputFile !== newOutputFile && FileSystem.exists(config.outputFile)) {
+          await FileSystem.rename(config.outputFile, newOutputFile);
+          config.outputFile = newOutputFile;
+        }
+        
+        config.pdfFile = path.join(repoPath, outputFileName.replace('.html', '.pdf'));
       }
 
       // Generate PDF if requested
@@ -710,6 +745,9 @@ async function stepGenerateNotes(config: ReleaseNotesConfig): Promise<void> {
     'other': 'other'
   };
 
+  // Track all ticket versions for version detection
+  const ticketVersions: Record<string, number> = {};
+
   // Process each category
   for (const [category, ticketIds] of Object.entries(categories)) {
     const mappedCategory = categoryMap[category];
@@ -755,6 +793,16 @@ async function stepGenerateNotes(config: ReleaseNotesConfig): Promise<void> {
         };
       }
 
+      // Extract version from ticket details if available
+      let releaseVersion: string | undefined;
+      if (details) {
+        // Try to extract version from various possible locations
+        releaseVersion = extractVersionFromTicketData(details);
+        if (releaseVersion) {
+          ticketVersions[releaseVersion] = (ticketVersions[releaseVersion] || 0) + 1;
+        }
+      }
+
       const ticketInfo: TicketInfo = {
         id: ticketId,
         title: details?.title || ticketCommits[0]?.message || 'No title',
@@ -764,7 +812,8 @@ async function stepGenerateNotes(config: ReleaseNotesConfig): Promise<void> {
         commits: ticketCommits,
         testingNotes,
         risks,
-        diffStats
+        diffStats,
+        releaseVersion
       };
 
       categorizedTickets[mappedCategory].push(ticketInfo);
@@ -828,11 +877,20 @@ async function stepGenerateNotes(config: ReleaseNotesConfig): Promise<void> {
     }
   }
 
+  // Determine the most common version across tickets
+  let dominantVersion = config.releaseVersion;
+  if (!dominantVersion && Object.keys(ticketVersions).length > 0) {
+    // Find the version with the most tickets
+    dominantVersion = Object.entries(ticketVersions)
+      .sort((a, b) => b[1] - a[1])[0][0];
+    logger.info(`Most common version across tickets: ${dominantVersion} (${ticketVersions[dominantVersion]} tickets)`);
+  }
+
   // Build release notes data
   const releaseData: ReleaseNotesData = {
-    title: `Release Notes - ${config.releaseVersion}`,
+    title: `Release Notes - ${dominantVersion || 'Development'}`,
     date: format(new Date(), 'MMMM d, yyyy'),
-    version: config.releaseVersion,
+    version: dominantVersion,
     branch: {
       source: config.sourceBranch,
       target: config.targetBranch
@@ -907,6 +965,48 @@ function getTestingNotes(category: string): string[] {
     default:
       return ['General testing required'];
   }
+}
+
+async function detectReleaseVersion(config: ReleaseNotesConfig): Promise<string | undefined> {
+  const detailsFile = path.join(config.workDir, 'ticket_details.json');
+  if (!FileSystem.exists(detailsFile)) {
+    return undefined;
+  }
+
+  const ticketDetails = await FileSystem.readJSON(detailsFile);
+  const versionCounts: Record<string, number> = {};
+
+  // Look for version information in ticket data
+  for (const ticketId of Object.keys(ticketDetails)) {
+    const version = extractVersionFromTicketData(ticketDetails[ticketId]);
+    if (version) {
+      versionCounts[version] = (versionCounts[version] || 0) + 1;
+    }
+  }
+
+  // Return the most common version
+  const versions = Object.entries(versionCounts).sort((a, b) => b[1] - a[1]);
+  if (versions.length > 0) {
+    const [mostCommonVersion, count] = versions[0];
+    logger.info(`Found version ${mostCommonVersion} in ${count} tickets`);
+    return mostCommonVersion;
+  }
+
+  return undefined;
+}
+
+function extractVersionFromTicketData(ticketData: any): string | undefined {
+  if (!ticketData) return undefined;
+
+  // Only check the fixVersions field from JIRA
+  if (ticketData.fixVersions && Array.isArray(ticketData.fixVersions)) {
+    // Return the first fix version found
+    if (ticketData.fixVersions.length > 0) {
+      return ticketData.fixVersions[0];
+    }
+  }
+
+  return undefined;
 }
 
 program.parse();

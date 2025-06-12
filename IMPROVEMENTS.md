@@ -2,6 +2,63 @@
 
 Based on the test run, here are potential improvements that could be made:
 
+## 0. Release Version Detection from JIRA Tickets ✅ IMPLEMENTED
+
+### Summary
+Implemented automatic release version detection from JIRA tickets. The system now:
+1. Searches for version information in ticket data during processing
+2. Uses majority voting to determine the most common version across tickets
+3. Falls back to generic filename if no version is detected
+4. Supports version mismatch indicators in the generated release notes
+
+### Implementation Details
+
+1. **Version Detection Logic** (`extractVersionFromTicketData`):
+   - Searches only the JIRA `fixVersions` field (as per JIRA REST API)
+   - Returns the first fix version if multiple are specified
+   - No longer searches in description, title, or other fields
+
+2. **Majority Voting** (`detectReleaseVersion`):
+   - Counts occurrences of each version across all tickets
+   - Selects the most frequently occurring version
+   - Logs the detected version and count for transparency
+
+3. **Version Mismatch Indicator**:
+   - Each ticket can have its own `releaseVersion` field
+   - If a ticket's version doesn't match the dominant version, a warning indicator (⚠️) is displayed
+   - Helps identify tickets that may have been incorrectly included in the release
+
+4. **Filename Generation**:
+   - Automatically names files using the detected version
+   - Falls back to date-based naming if no version is detected
+   - Example: `release_notes_V17.01.00_2025-06-11.pdf`
+
+### Usage
+
+```bash
+# Generate release notes with automatic version detection
+./toolbox release-notes --repo /Users/paul/code/gather/webapp --ai-model sonnet --pdf
+
+# Override with specific version
+./toolbox release-notes --repo /Users/paul/code/gather/webapp --version V17.01.00 --ai-model sonnet --pdf
+```
+
+### Current Limitations
+
+1. **JIRA Field Availability**: Version detection now depends on the Fix Version field being set in JIRA:
+   - Product managers must set the Fix Version field for each ticket
+   - Tickets without Fix Version will show a warning indicator (⚠️) in the release notes
+   - The tool will use majority voting to determine the release version
+
+2. **Version Format**: Currently supports common patterns but may need extension for custom formats
+
+### Future Enhancements for Version Detection
+
+1. **Branch-based Detection**: Extract version from branch names (e.g., `release/V17.01.00`)
+2. **Tag-based Detection**: Use git tags to determine release version
+3. **JIRA Custom Fields**: Query specific custom fields for version information
+4. **Configuration**: Allow users to configure version detection patterns
+
 ## 1. AI Response Quality
 - **Issue**: Some tickets still get generic testing notes despite having the AI analysis
 - **Solution**: 

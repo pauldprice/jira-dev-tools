@@ -5,7 +5,7 @@
 export interface ReleaseNotesData {
   title: string;
   date: string;
-  version: string;
+  version?: string;
   branch: {
     source: string;
     target: string;
@@ -48,6 +48,7 @@ export interface TicketInfo {
     additions: number;
     deletions: number;
   };
+  releaseVersion?: string;
 }
 
 export interface CommitInfo {
@@ -72,7 +73,7 @@ export class HtmlGenerator {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${data.title} - ${data.date}</title>
     <style>
-        ${this.getOptimizedStyles(data.version)}
+        ${this.getOptimizedStyles(data.version || '')}
     </style>
 </head>
 <body>
@@ -533,7 +534,7 @@ export class HtmlGenerator {
             margin: 2.5cm 2cm 2cm 2cm; /* top right bottom left */
             
             @top-center {
-                content: "Release Notes: ${version}";
+                content: "Release Notes${version ? ': ' + version : ''}";
                 font-size: 9pt;
                 color: #7f8c8d;
                 padding-bottom: 0.5cm;
@@ -589,7 +590,7 @@ export class HtmlGenerator {
         <div class="cover-page">
             <div class="logo-container">${logoSvg}</div>
             <div class="cover-title">Release Notes</div>
-            <div class="cover-subtitle">${data.version}</div>
+            <div class="cover-subtitle">${data.version || 'Development Build'}</div>
             <div class="cover-meta">
                 <p><strong>Generated:</strong> ${data.date}</p>
                 <p><strong>Branch:</strong> ${data.branch.source}</p>
@@ -645,6 +646,7 @@ export class HtmlGenerator {
             
             <h2>Release Highlights & Quick Reference</h2>
             <ul>
+                ${data.version ? `<li><strong>Release Version:</strong> ${data.version}</li>` : ''}
                 <li><strong>${percentBugFixes}%</strong> of changes are bug fixes, improving system stability</li>
                 ${data.stats.newFeatures > 0 ? `<li><strong>${data.stats.newFeatures}</strong> new features enhance user capabilities</li>` : ''}
                 ${data.stats.apiChanges > 0 ? `<li><strong>${data.stats.apiChanges}</strong> API changes require integration review</li>` : ''}
@@ -862,13 +864,13 @@ export class HtmlGenerator {
               .filter(section => section.tickets.length > 0)
               .map(section => `
                 <h2 id="${section.id}">${section.title}</h2>
-                ${section.tickets.map(ticket => this.generateCompactTicket(ticket)).join('')}
+                ${section.tickets.map(ticket => this.generateCompactTicket(ticket, data)).join('')}
               `).join('')}
         </section>
     `;
   }
 
-  private static generateCompactTicket(ticket: TicketInfo): string {
+  private static generateCompactTicket(ticket: TicketInfo, data: ReleaseNotesData): string {
     // Filter out generic testing notes
     const specificTestingNotes = this.filterGenericNotes(ticket.testingNotes || []);
     const specificRisks = this.filterGenericNotes(ticket.risks || []);
@@ -895,6 +897,11 @@ export class HtmlGenerator {
                 <div class="diff-stats">
                     <span class="diff-added">+${ticket.diffStats.additions.toLocaleString()}</span>
                     <span class="diff-removed">-${ticket.diffStats.deletions.toLocaleString()}</span>
+                </div>
+                ` : ''}
+                ${ticket.releaseVersion && data.version && ticket.releaseVersion !== data.version ? `
+                <div class="version-mismatch" style="color: #e74c3c; font-weight: bold; margin-left: 1em;">
+                    ⚠️ Release: ${ticket.releaseVersion}
                 </div>
                 ` : ''}
             </div>

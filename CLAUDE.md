@@ -147,10 +147,17 @@ Note: Environment variables always take precedence over config files.
 ./toolbox fetch-jira APP-1234
 
 # Test release notes generation
-./toolbox release-notes --repo /path/to/repo --ai-model sonnet
+# IMPORTANT: The webapp repository path is /Users/paul/code/gather/webapp
+./toolbox release-notes --repo /Users/paul/code/gather/webapp --ai-model sonnet
 
 # Run with verbose output
-./toolbox release-notes --repo /path/to/repo -v
+./toolbox release-notes --repo /Users/paul/code/gather/webapp -v
+
+# Generate with specific version
+./toolbox release-notes --repo /Users/paul/code/gather/webapp --version V17.01.00 --ai-model sonnet --pdf
+
+# Generate without version (auto-detect from tickets)
+./toolbox release-notes --repo /Users/paul/code/gather/webapp --ai-model sonnet --pdf
 
 # Manage cache
 ./toolbox cache stats
@@ -187,6 +194,17 @@ Cache is stored in `.toolbox_cache/` by default and can be managed via the cache
 - Performance optimizations for large repositories
 - Enhanced AI analysis capabilities
 - Improved error recovery mechanisms
+
+## Version Detection from JIRA
+
+The release notes generator can automatically detect the release version from JIRA tickets:
+
+1. **Fix Version Field**: The tool looks for the `fixVersions` field in JIRA tickets
+2. **Majority Voting**: If multiple tickets have different versions, the most common version wins
+3. **Version Mismatch Warning**: Tickets without the dominant version show a warning (⚠️)
+4. **Automatic File Naming**: Generated files are named with the detected version (e.g., `release_notes_V17.01.00_2025-06-11.pdf`)
+
+**Important**: Product managers must set the Fix Version field in JIRA for automatic version detection to work.
 
 ## PDF Analysis
 
