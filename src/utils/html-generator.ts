@@ -663,8 +663,10 @@ export class HtmlGenerator {
                 <div><a href="#change-summary">Change Summary Table</a></div>
                 ${data.categories.bugFixes.length > 0 ? '<div><a href="#critical-bug-fixes">Critical Bug Fixes</a></div>' : ''}
                 ${data.categories.newFeatures.length > 0 ? '<div><a href="#new-features">New Features</a></div>' : ''}
+                ${data.categories.uiUpdates.length > 0 ? '<div><a href="#ui-updates">UI Updates</a></div>' : ''}
                 ${data.categories.apiChanges.length > 0 ? '<div><a href="#api-changes">API Changes</a></div>' : ''}
-                ${(data.categories.uiUpdates.length + data.categories.refactoring.length + data.categories.other.length) > 0 ? '<div><a href="#other-changes">Other Changes</a></div>' : ''}
+                ${data.categories.refactoring.length > 0 ? '<div><a href="#refactoring">Code Refactoring</a></div>' : ''}
+                ${data.categories.other.length > 0 ? '<div><a href="#other-changes">Other Changes</a></div>' : ''}
                 <div><a href="#appendix">Appendix: Full Commit List</a></div>
             </div>
         </section>
@@ -856,8 +858,10 @@ export class HtmlGenerator {
     const sections = [
       { id: 'critical-bug-fixes', title: '🐛 Critical Bug Fixes', tickets: data.categories.bugFixes },
       { id: 'new-features', title: '✨ New Features', tickets: data.categories.newFeatures },
+      { id: 'ui-updates', title: '🎨 UI Updates', tickets: data.categories.uiUpdates },
       { id: 'api-changes', title: '🔧 API Changes', tickets: data.categories.apiChanges },
-      { id: 'other-changes', title: '📦 Other Changes', tickets: [...data.categories.uiUpdates, ...data.categories.refactoring, ...data.categories.other] },
+      { id: 'refactoring', title: '♻️ Code Refactoring', tickets: data.categories.refactoring },
+      { id: 'other-changes', title: '📦 Other Changes', tickets: data.categories.other },
     ];
 
     return `
