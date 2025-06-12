@@ -634,7 +634,12 @@ async function stepAnalyzeCode(_git: SimpleGit, config: ReleaseNotesConfig): Pro
     tickets,
     async (ticket, _index) => {
       // Get code diff for this ticket
-      const diff = await getTicketCodeDiff(config.repoPath, ticket, config.targetBranch);
+      const diff = await getTicketCodeDiff(
+        config.repoPath, 
+        ticket, 
+        config.targetBranch,
+        config.mode === 'version' // Use allBranches in version mode
+      );
       
       if (!diff) {
         logger.info(`No code diff found for ${ticket} - this ticket may not have commits in this branch`);

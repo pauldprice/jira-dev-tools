@@ -39,15 +39,36 @@ export function getTicketCommits(repoPath: string, ticketId: string, targetBranc
 }
 
 /**
+ * Get all commits for a specific ticket across ALL branches
+ */
+export function getTicketCommitsAllBranches(repoPath: string, ticketId: string): string[] {
+  try {
+    // Get all commits across all branches that mention this ticket, excluding merge commits
+    const allCommits = execSync(
+      `git log --all --grep="${ticketId}" --format=%H --no-merges`,
+      { cwd: repoPath, encoding: 'utf-8' }
+    ).trim().split('\n').filter(Boolean);
+
+    return allCommits;
+  } catch (error) {
+    logger.debug(`No commits found for ticket ${ticketId}`);
+    return [];
+  }
+}
+
+/**
  * Get the code diff for all commits related to a ticket
  */
 export async function getTicketCodeDiff(
   repoPath: string, 
   ticketId: string, 
-  targetBranch: string = 'origin/master'
+  targetBranch: string = 'origin/master',
+  allBranches: boolean = false
 ): Promise<CodeDiff | null> {
   try {
-    const commits = getTicketCommits(repoPath, ticketId, targetBranch);
+    const commits = allBranches 
+      ? getTicketCommitsAllBranches(repoPath, ticketId)
+      : getTicketCommits(repoPath, ticketId, targetBranch);
     
     if (commits.length === 0) {
       logger.debug(`No commits found for ticket ${ticketId}`);
