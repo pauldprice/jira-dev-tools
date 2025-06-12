@@ -1,4 +1,4 @@
-import { config } from './config';
+import { config as appConfig } from './config';
 import { logger } from './logger';
 import { cachedFetch } from './cached-fetch';
 
@@ -43,13 +43,25 @@ export class BitbucketClient {
   constructor(config: BitbucketConfig) {
     this.workspace = config.workspace;
     this.repoSlug = config.repoSlug;
-    // Use JIRA API token as it's an Atlassian token
-    this.apiToken = config.apiToken || process.env.JIRA_API_TOKEN || '';
+    // Use Bitbucket-specific token first, fall back to JIRA token
+    this.apiToken = config.apiToken || 
+                   (appConfig.get('BITBUCKET_ACCESS_TOKEN') as string) || 
+                   (appConfig.get('JIRA_API_TOKEN') as string) || '';
     
     if (!this.apiToken) {
-      logger.warn('No Bitbucket/JIRA API token found. PR detection will be disabled.');
+      logger.warn('No Bitbucket access token found. PR detection will be disabled.');
+      logger.info('Set BITBUCKET_ACCESS_TOKEN in environment or config file');
     } else {
       logger.info(`Bitbucket client initialized for ${this.workspace}/${this.repoSlug}`);
+      // Debug: Show which token source was used (but not the token itself)
+      if (config.apiToken) {
+        logger.info('Using provided API token');
+      } else if (appConfig.get('BITBUCKET_ACCESS_TOKEN')) {
+        logger.info('Using BITBUCKET_ACCESS_TOKEN from config');
+        logger.info(`Token present: ${this.apiToken ? 'yes' : 'no'}, length: ${this.apiToken?.length || 0}`);
+      } else {
+        logger.info('Using JIRA_API_TOKEN as fallback');
+      }
     }
   }
 
@@ -93,7 +105,7 @@ export class BitbucketClient {
       
       const response = await cachedFetch.fetch(url, {
         headers: {
-          'Authorization': `Basic ${Buffer.from(`${config.get('JIRA_EMAIL')}:${this.apiToken}`).toString('base64')}`,
+          'Authorization': `Bearer ${this.apiToken}`,
           'Accept': 'application/json'
         },
         cache: {
@@ -105,7 +117,8 @@ export class BitbucketClient {
       if (!response.ok) {
         logger.warn(`Bitbucket API returned ${response.status}: ${response.statusText}`);
         if (response.status === 401) {
-          logger.warn('Authentication failed. Check JIRA_API_TOKEN and JIRA_EMAIL');
+          logger.warn('Authentication failed. Check BITBUCKET_ACCESS_TOKEN is valid');
+          logger.warn('Create a Bitbucket app password at: https://bitbucket.org/account/settings/app-passwords/');
         }
         return [];
       }
@@ -154,7 +167,7 @@ export class BitbucketClient {
       
       const response = await cachedFetch.fetch(url, {
         headers: {
-          'Authorization': `Basic ${Buffer.from(`${config.get('JIRA_EMAIL')}:${this.apiToken}`).toString('base64')}`,
+          'Authorization': `Bearer ${this.apiToken}`,
           'Accept': 'application/json'
         },
         cache: {

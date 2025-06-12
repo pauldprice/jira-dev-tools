@@ -37,7 +37,8 @@ Example JSON format:
   "ANTHROPIC_API_KEY": "your-api-key-here",
   "JIRA_BASE_URL": "https://your-domain.atlassian.net",
   "JIRA_EMAIL": "your-email@example.com",
-  "JIRA_API_TOKEN": "your-jira-api-token"
+  "JIRA_API_TOKEN": "your-jira-api-token",
+  "BITBUCKET_ACCESS_TOKEN": "your-bitbucket-access-token"
 }
 ```
 
@@ -47,6 +48,7 @@ ANTHROPIC_API_KEY=your-api-key-here
 JIRA_BASE_URL=https://your-domain.atlassian.net
 JIRA_EMAIL=your-email@example.com
 JIRA_API_TOKEN=your-jira-api-token
+BITBUCKET_ACCESS_TOKEN=your-bitbucket-access-token
 ```
 
 Note: Environment variables always take precedence over config files.
@@ -246,9 +248,11 @@ The release notes generator automatically detects and links to Bitbucket pull re
 - **Cached Requests**: API calls are cached for 5 minutes to improve performance
 
 ### Configuration
-- Uses the same JIRA_API_TOKEN (Atlassian API token)
+- Uses BITBUCKET_ACCESS_TOKEN (create in Bitbucket settings)
+- Falls back to JIRA_API_TOKEN if Bitbucket token not set
 - Automatically parses workspace and repository from git remote URL
 - Works with both SSH and HTTPS git remotes
+- Requires JIRA_EMAIL for authentication
 
 ### Display
 Pull requests appear in the ticket metadata section:

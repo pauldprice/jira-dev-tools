@@ -18,6 +18,7 @@ export interface AnthropicConfig {
 export interface ToolboxConfig extends JiraConfig, AnthropicConfig {
   VERBOSE?: boolean;
   NO_COLOR?: boolean;
+  BITBUCKET_ACCESS_TOKEN?: string;
 }
 
 export class ConfigLoader {
@@ -58,6 +59,7 @@ export class ConfigLoader {
       JIRA_EMAIL: process.env.JIRA_EMAIL,
       JIRA_API_TOKEN: process.env.JIRA_API_TOKEN,
       ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+      BITBUCKET_ACCESS_TOKEN: process.env.BITBUCKET_ACCESS_TOKEN,
       VERBOSE: process.env.VERBOSE === 'true' || 
                process.argv.includes('--verbose') || 
                process.argv.includes('-v'),
@@ -160,6 +162,9 @@ export class ConfigLoader {
             if (config.JIRA_API_TOKEN && !process.env.JIRA_API_TOKEN) {
               process.env.JIRA_API_TOKEN = config.JIRA_API_TOKEN;
             }
+            if (config.BITBUCKET_ACCESS_TOKEN && !process.env.BITBUCKET_ACCESS_TOKEN) {
+              process.env.BITBUCKET_ACCESS_TOKEN = config.BITBUCKET_ACCESS_TOKEN;
+            }
           } catch {
             // If not JSON, try key=value format
             const lines = content.split('\n');
@@ -177,6 +182,8 @@ export class ConfigLoader {
                     process.env.JIRA_EMAIL = value;
                   } else if (key === 'JIRA_API_TOKEN' && !process.env.JIRA_API_TOKEN) {
                     process.env.JIRA_API_TOKEN = value;
+                  } else if (key === 'BITBUCKET_ACCESS_TOKEN' && !process.env.BITBUCKET_ACCESS_TOKEN) {
+                    process.env.BITBUCKET_ACCESS_TOKEN = value;
                   }
                 }
               }
