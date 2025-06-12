@@ -899,9 +899,9 @@ export class HtmlGenerator {
                     <span class="diff-removed">-${ticket.diffStats.deletions.toLocaleString()}</span>
                 </div>
                 ` : ''}
-                ${ticket.releaseVersion && data.version && ticket.releaseVersion !== data.version ? `
+                ${data.version && (!ticket.releaseVersion || ticket.releaseVersion !== data.version) ? `
                 <div class="version-mismatch" style="color: #e74c3c; font-weight: bold; margin-left: 1em;">
-                    ⚠️ Release: ${ticket.releaseVersion}
+                    ⚠️ ${ticket.releaseVersion ? `Version: ${ticket.releaseVersion}` : 'No Fix Version'}
                 </div>
                 ` : ''}
             </div>
