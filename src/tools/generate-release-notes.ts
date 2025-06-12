@@ -293,7 +293,7 @@ async function runStep(step: string, git: SimpleGit, config: ReleaseNotesConfig)
 }
 
 async function runAllSteps(git: SimpleGit, config: ReleaseNotesConfig, resume: boolean): Promise<void> {
-  const steps = ['fetch', 'extract', 'categorize', 'details', 'analyze', 'generate'];
+  const steps = ['fetch', 'extract', 'details', 'categorize', 'analyze', 'generate'];
   let startIndex = 0;
 
   if (resume) {
@@ -410,7 +410,7 @@ async function stepExtractTickets(config: ReleaseNotesConfig): Promise<void> {
 }
 
 async function stepCategorizeTickets(config: ReleaseNotesConfig): Promise<void> {
-  logger.header('Step 3: Categorizing Tickets');
+  logger.header('Step 4: Categorizing Tickets');
   
   const commitsFile = path.join(config.workDir, 'commits.txt');
   const ticketsFile = path.join(config.workDir, 'tickets.txt');
@@ -438,6 +438,10 @@ async function stepCategorizeTickets(config: ReleaseNotesConfig): Promise<void> 
   const commits = await FileSystem.readFile(commitsFile);
   const tickets = (await FileSystem.readFile(ticketsFile)).split('\n').filter(Boolean);
   
+  // Load ticket details if available (from step 4)
+  const detailsFile = path.join(config.workDir, 'ticket_details.json');
+  const ticketDetails = FileSystem.exists(detailsFile) ? await FileSystem.readJSON(detailsFile) : null;
+  
   const total = tickets.length;
   let current = 0;
 
@@ -449,24 +453,65 @@ async function stepCategorizeTickets(config: ReleaseNotesConfig): Promise<void> 
       progress.update(`Categorizing ${current}/${total}: ${ticket}`);
     }
 
-    // Get all commits for this ticket
-    const ticketCommits = commits.split('\n')
-      .filter(line => line.includes(ticket))
-      .join(' ').toLowerCase();
-
-    // Categorize based on commit messages
+    // Get JIRA details for categorization if available
     let category = 'other';
     
-    if (/\b(fix|bug|error|crash|issue|resolve|patch)\b/.test(ticketCommits)) {
-      category = 'bug_fixes';
-    } else if (/\b(add|new|implement|create|feature|introduce)\b/.test(ticketCommits)) {
-      category = 'new_features';
-    } else if (/\b(ui|style|css|design|layout|responsive|theme)\b/.test(ticketCommits)) {
-      category = 'ui_updates';
-    } else if (/\b(api|endpoint|route|controller|backend|service)\b/.test(ticketCommits)) {
-      category = 'api_changes';
-    } else if (/\b(refactor|cleanup|optimize|improve|simplify)\b/.test(ticketCommits)) {
-      category = 'refactoring';
+    if (ticketDetails && ticketDetails[ticket]) {
+      const issueType = ticketDetails[ticket].issueType?.toLowerCase() || '';
+      const title = ticketDetails[ticket].title?.toLowerCase() || '';
+      
+      if (config.verbose) {
+        logger.info(`${ticket}: issueType='${issueType}', title='${title}'`);
+      }
+      
+      // Categorize based on JIRA issue type first
+      if (issueType.includes('bug') || issueType.includes('defect')) {
+        category = 'bug_fixes';
+      } else if (issueType.includes('story') || issueType.includes('feature') || issueType.includes('improvement') || issueType.includes('enhancement')) {
+        // For non-bug tickets, check title/description for specific areas
+        const titleAndDesc = `${title} ${ticketDetails[ticket].description?.toLowerCase() || ''}`;
+        if (/\b(ui|style|css|design|layout|responsive|theme|button|form|page|screen|view|modal|component|payment.*page|payer.*card)\b/.test(titleAndDesc)) {
+          category = 'ui_updates';
+        } else if (/\b(api|endpoint|route|controller|backend|service|integration|webhook)\b/.test(titleAndDesc)) {
+          category = 'api_changes';
+        } else if (/\b(refactor|cleanup|optimize|simplify|reorganize)\b/.test(titleAndDesc)) {
+          category = 'refactoring';
+        } else {
+          category = 'new_features';
+        }
+      } else if (issueType.includes('task')) {
+        // Tasks could be anything, check the title and description
+        const titleAndDesc = `${title} ${ticketDetails[ticket].description?.toLowerCase() || ''}`;
+        if (/\b(ui|style|css|design|layout|responsive|theme|button|form|page|screen|view|modal|component|payment.*page|payer.*card|user.*experience)\b/.test(titleAndDesc)) {
+          category = 'ui_updates';
+        } else if (/\b(api|endpoint|route|controller|backend|service|integration|webhook)\b/.test(titleAndDesc)) {
+          category = 'api_changes';
+        } else if (/\b(refactor|cleanup|optimize|simplify|reorganize)\b/.test(titleAndDesc)) {
+          category = 'refactoring';
+        } else if (/\b(fix|bug|error|crash|issue|resolve|patch)\b/.test(titleAndDesc)) {
+          category = 'bug_fixes';
+        } else {
+          // Default tasks to features if they're implementing something new
+          category = 'new_features';
+        }
+      }
+    } else {
+      // Fallback to commit message analysis if no JIRA data
+      const ticketCommits = commits.split('\n')
+        .filter(line => line.includes(ticket))
+        .join(' ').toLowerCase();
+      
+      if (/\b(fix|bug|error|crash|issue|resolve|patch)\b/.test(ticketCommits)) {
+        category = 'bug_fixes';
+      } else if (/\b(add|new|implement|create|feature|introduce)\b/.test(ticketCommits)) {
+        category = 'new_features';
+      } else if (/\b(ui|style|css|design|layout|responsive|theme)\b/.test(ticketCommits)) {
+        category = 'ui_updates';
+      } else if (/\b(api|endpoint|route|controller|backend|service)\b/.test(ticketCommits)) {
+        category = 'api_changes';
+      } else if (/\b(refactor|cleanup|optimize|improve|simplify)\b/.test(ticketCommits)) {
+        category = 'refactoring';
+      }
     }
 
     categories[category].push(ticket);
@@ -486,7 +531,7 @@ async function stepCategorizeTickets(config: ReleaseNotesConfig): Promise<void> 
 }
 
 async function stepFetchTicketDetails(config: ReleaseNotesConfig): Promise<void> {
-  logger.header('Step 4: Fetching Ticket Details');
+  logger.header('Step 3: Fetching Ticket Details');
   
   if (!config.fetchJiraDetails) {
     logger.info('Skipping Jira details (disabled)');

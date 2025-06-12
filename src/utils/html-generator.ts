@@ -806,6 +806,7 @@ export class HtmlGenerator {
                     <tr>
                         <th>Ticket</th>
                         <th>Title</th>
+                        <th>Status</th>
                         <th>Category</th>
                         <th>Assignee</th>
                         <th>Risk</th>
@@ -816,6 +817,7 @@ export class HtmlGenerator {
                         <tr>
                             <td><strong><a href="#${ticket.id}" style="color: #2c3e50; text-decoration: none;">${ticket.id}</a></strong></td>
                             <td>${ticket.title}</td>
+                            <td>${ticket.status || 'Unknown'}</td>
                             <td>${ticket.category}</td>
                             <td>${ticket.assignee || 'Unassigned'}</td>
                             <td>${this.assessTicketRisk(ticket)}</td>
@@ -888,6 +890,7 @@ export class HtmlGenerator {
                     <span class="category-icon">${categoryIcon}</span>
                     <span class="ticket-id"><a href="${this.getJiraUrl(ticket.id)}" target="_blank" style="color: #2c3e50; text-decoration: none;">${ticket.id}</a></span>
                     <span class="ticket-title">${ticket.title}</span>
+                    ${ticket.status ? `<span style="color: #7f8c8d; font-size: 0.9em; margin-left: 1em;">(${ticket.status})</span>` : ''}
                 </div>
             </div>
             <div class="ticket-meta">

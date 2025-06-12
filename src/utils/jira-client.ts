@@ -19,6 +19,10 @@ export interface JiraIssue {
     status?: {
       name: string;
     };
+    issuetype?: {
+      name: string;
+      description?: string;
+    };
     priority?: {
       name: string;
     };
@@ -67,6 +71,7 @@ export interface LLMFriendlyOutput {
   ticketId: string;
   title: string;
   status?: string;
+  issueType?: string;
   priority?: string;
   labels?: string[];
   created: string;
@@ -220,6 +225,7 @@ function formatForLLM(issue: JiraIssue, comments: JiraComment[], baseUrl: string
   const summary = `# Jira Ticket ${issue.key}: ${issue.fields.summary}
 
 **Status**: ${issue.fields.status?.name || 'Unknown'}
+**Type**: ${issue.fields.issuetype?.name || 'Unknown'}
 **Priority**: ${issue.fields.priority?.name || 'None'}
 **Fix Version(s)**: ${fixVersionsStr}
 **Reporter**: ${JiraFormatter.formatUser(issue.fields.reporter)}
@@ -235,6 +241,7 @@ function formatForLLM(issue: JiraIssue, comments: JiraComment[], baseUrl: string
     ticketId: issue.key,
     title: issue.fields.summary,
     status: issue.fields.status?.name,
+    issueType: issue.fields.issuetype?.name,
     priority: issue.fields.priority?.name,
     labels: issue.fields.labels || [],
     created: JiraFormatter.formatDate(issue.fields.created),
@@ -258,7 +265,7 @@ export async function searchJiraTickets(
     fields?: string[];
   } = {}
 ): Promise<JiraIssue[]> {
-  const { maxResults = 100, fields = ['summary', 'status', 'assignee', 'fixVersions'] } = options;
+  const { maxResults = 100, fields = ['summary', 'status', 'issuetype', 'assignee', 'fixVersions'] } = options;
   
   // Create Jira client
   const client = createJiraClient(
