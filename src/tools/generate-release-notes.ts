@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
-import { logger, progress, FileSystem, config as appConfig, HtmlGenerator, getTicketCodeDiff, ParallelProcessor, PDFGenerator, fetchJiraTicketCached, createCachedClaudeClient, searchJiraTickets } from '../utils';
+import { logger, progress, FileSystem, config as appConfig, HtmlGenerator, getTicketCodeDiff, getTicketBranchStatus, ParallelProcessor, PDFGenerator, fetchJiraTicketCached, createCachedClaudeClient, searchJiraTickets } from '../utils';
 import type { ReleaseNotesData, TicketInfo, CommitInfo, JiraCredentials } from '../utils';
 import simpleGit, { SimpleGit } from 'simple-git';
 import * as path from 'path';
@@ -351,7 +351,8 @@ async function stepFetchCommits(_git: SimpleGit, config: ReleaseNotesConfig): Pr
   try {
     // Use git command directly for more reliable results
     const { execSync } = await import('child_process');
-    const gitCommand = `git log ${config.targetBranch}..${config.sourceBranch} --oneline --no-merges`;
+    // Get commits with author and date information
+    const gitCommand = `git log ${config.targetBranch}..${config.sourceBranch} --pretty=format:"%H|%an|%ai|%s" --no-merges`;
     const gitOutput = execSync(gitCommand, { 
       cwd: config.repoPath,
       encoding: 'utf-8'
@@ -804,12 +805,25 @@ async function stepGenerateNotes(config: ReleaseNotesConfig): Promise<void> {
 
   // Build commit info
   const allCommits: CommitInfo[] = commits.map(line => {
-    const [hash, ...messageParts] = line.split(' ');
-    return {
-      hash,
-      author: '', // We don't have author info in the simple format
-      message: messageParts.join(' ')
-    };
+    // Format is: hash|author|date|message
+    const parts = line.split('|');
+    if (parts.length >= 4) {
+      const [hash, author, date, ...messageParts] = parts;
+      return {
+        hash,
+        author,
+        message: messageParts.join('|'), // In case message contains |
+        date // Add date to the object
+      };
+    } else {
+      // Fallback for old format
+      const [hash, ...messageParts] = line.split(' ');
+      return {
+        hash,
+        author: 'Unknown',
+        message: messageParts.join(' ')
+      };
+    }
   });
 
   // Build categorized ticket info
@@ -890,6 +904,14 @@ async function stepGenerateNotes(config: ReleaseNotesConfig): Promise<void> {
         }
       }
 
+      // Check branch status
+      let branchStatus;
+      try {
+        branchStatus = await getTicketBranchStatus(config.repoPath, ticketId);
+      } catch (error) {
+        logger.debug(`Could not check branch status for ${ticketId}`);
+      }
+
       const ticketInfo: TicketInfo = {
         id: ticketId,
         title: details?.title || ticketCommits[0]?.message || 'No title',
@@ -900,7 +922,8 @@ async function stepGenerateNotes(config: ReleaseNotesConfig): Promise<void> {
         testingNotes,
         risks,
         diffStats,
-        releaseVersion
+        releaseVersion,
+        branchStatus
       };
 
       categorizedTickets[mappedCategory].push(ticketInfo);

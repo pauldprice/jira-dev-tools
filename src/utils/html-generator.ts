@@ -49,12 +49,17 @@ export interface TicketInfo {
     deletions: number;
   };
   releaseVersion?: string;
+  branchStatus?: {
+    hasRemoteBranch: boolean;
+    branchNames: string[];
+  };
 }
 
 export interface CommitInfo {
   hash: string;
   author: string;
   message: string;
+  date?: string;
 }
 
 export class HtmlGenerator {
@@ -906,6 +911,11 @@ export class HtmlGenerator {
                     <span class="diff-removed">-${ticket.diffStats.deletions.toLocaleString()}</span>
                 </div>
                 ` : ''}
+                ${ticket.branchStatus && ticket.branchStatus.hasRemoteBranch ? `
+                <div style="color: #27ae60; font-weight: bold; margin-left: 1em;">
+                    🌿 ${ticket.branchStatus.branchNames.length > 0 ? 'Has unmerged branch' : 'Branch merged'}
+                </div>
+                ` : ''}
                 ${data.version && (!ticket.releaseVersion || ticket.releaseVersion !== data.version) ? `
                 <div class="version-mismatch" style="color: #e74c3c; font-weight: bold; margin-left: 1em;">
                     ⚠️ ${ticket.releaseVersion ? `Version: ${ticket.releaseVersion}` : 'No Fix Version'}
@@ -992,19 +1002,29 @@ export class HtmlGenerator {
                 <thead>
                     <tr>
                         <th>Hash</th>
+                        <th>Author</th>
+                        <th>Date</th>
                         <th>Message</th>
                         <th>Ticket</th>
                     </tr>
                 </thead>
                 <tbody>
-                    ${data.commits.slice(0, 50).map(commit => {
+                    ${data.commits.map((commit, index) => {
                         const ticketMatch = commit.message.match(/([A-Z]+-\d+)/);
                         const ticketId = ticketMatch ? ticketMatch[1] : null;
                         const shortHash = commit.hash.substring(0, 8);
                         const commitLink = this.getCommitUrl(commit.hash);
+                        const formattedDate = commit.date ? new Date(commit.date).toLocaleDateString('en-US', { 
+                            month: 'short', 
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        }) : '';
                         return `
                             <tr>
                                 <td class="commit-hash">${commitLink ? `<a href="${commitLink}" target="_blank" style="color: #2c3e50;">${shortHash}</a>` : shortHash}</td>
+                                <td>${commit.author || 'Unknown'}</td>
+                                <td style="white-space: nowrap;">${formattedDate}</td>
                                 <td>${commit.message}</td>
                                 <td>${ticketId ? `<a href="#${ticketId}" style="color: #2c3e50;">${ticketId}</a>` : '-'}</td>
                             </tr>
@@ -1012,7 +1032,6 @@ export class HtmlGenerator {
                     }).join('')}
                 </tbody>
             </table>
-            ${data.commits.length > 50 ? `<p><em>... and ${data.commits.length - 50} more commits</em></p>` : ''}
         </section>
     `;
   }

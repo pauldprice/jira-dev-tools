@@ -12,6 +12,7 @@ The Gather Toolbox is a TypeScript-based CLI utility collection for development 
 - **CLI Framework**: Commander.js for argument parsing
 - **Main Entry**: `toolbox` shell script that invokes individual tools via ts-node
 - **Structure**: Modular architecture with shared utilities in `src/utils/`
+- **Source Control**: Bitbucket (NOT GitHub) - no `gh` CLI available
 
 ## Configuration
 
@@ -111,6 +112,8 @@ Note: Environment variables always take precedence over config files.
 - Isolate ticket-specific changes (don't include merged commits)
 - Handle both remote branches and local branches
 - Clean up temporary files after operations
+- Repository is hosted on Bitbucket - use git commands only, no GitHub CLI
+- Pull requests must be created through Bitbucket web interface
 
 ### API Integration
 - Use parallel processing for bulk operations

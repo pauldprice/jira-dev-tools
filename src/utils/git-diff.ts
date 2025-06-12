@@ -436,3 +436,56 @@ export function formatDiffForAI(diff: CodeDiff): string {
   
   return output.join('\n');
 }
+
+/**
+ * Check if a ticket has branches that might have pull requests
+ * Since we use Bitbucket, we can't directly check PR status via CLI
+ * Instead, we check for remote branches with the ticket ID
+ */
+export async function getTicketBranchStatus(
+  repoPath: string,
+  ticketId: string
+): Promise<{ hasRemoteBranch: boolean; branchNames: string[] } | null> {
+  try {
+    // Get all remote branches
+    const remoteBranches = execSync(
+      'git branch -r --format="%(refname:short)"',
+      { cwd: repoPath, encoding: 'utf-8' }
+    ).trim().split('\n').filter(Boolean);
+    
+    // Find branches with the ticket ID
+    const ticketBranches = remoteBranches.filter(branch => 
+      branch.toUpperCase().includes(ticketId.toUpperCase()) &&
+      !branch.includes('HEAD')
+    );
+    
+    if (ticketBranches.length > 0) {
+      // Check if any of these branches are not merged to master
+      const unmergedBranches: string[] = [];
+      
+      for (const branch of ticketBranches) {
+        try {
+          // Check if branch is merged to master
+          execSync(
+            `git merge-base --is-ancestor ${branch} origin/master`,
+            { cwd: repoPath, stdio: 'ignore' }
+          );
+          // If no error, branch is merged
+        } catch {
+          // If error, branch is not merged (likely has an open PR)
+          unmergedBranches.push(branch);
+        }
+      }
+      
+      return {
+        hasRemoteBranch: true,
+        branchNames: unmergedBranches.length > 0 ? unmergedBranches : ticketBranches
+      };
+    }
+    
+    return null;
+  } catch (error: any) {
+    logger.debug(`Failed to check branches for ${ticketId}: ${error.message}`);
+    return null;
+  }
+}
