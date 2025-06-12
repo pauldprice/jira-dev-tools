@@ -593,6 +593,11 @@ async function stepFetchTicketDetails(config: ReleaseNotesConfig): Promise<void>
         }
       );
       
+      if (config.verbose && ticketData) {
+        logger.info(`Fetched ${ticket}: issueType='${ticketData.issueType}', status='${ticketData.status}'`);
+        // Debug the full structure
+        logger.debug(`Full ticketData keys: ${Object.keys(ticketData).join(', ')}`);
+      }
       return { ticket, data: ticketData };
     }
   );
@@ -610,6 +615,9 @@ async function stepFetchTicketDetails(config: ReleaseNotesConfig): Promise<void>
       const { ticket, data } = result as any;
       ticketDetails[ticket] = data;
       successful++;
+      if (config.verbose && data) {
+        logger.info(`Saved ${ticket}: issueType='${data.issueType}'`);
+      }
     }
   });
 
@@ -1118,7 +1126,7 @@ async function stepFetchTicketsByVersion(config: ReleaseNotesConfig): Promise<vo
     // Search for tickets
     const issues = await searchJiraTickets(jql, jiraConfig, {
       maxResults: 500,
-      fields: ['key', 'summary', 'status', 'fixVersions']
+      fields: ['key', 'summary', 'status', 'issuetype', 'fixVersions']
     });
     
     // Extract ticket IDs
