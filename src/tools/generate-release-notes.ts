@@ -907,7 +907,8 @@ async function stepGenerateNotes(config: ReleaseNotesConfig): Promise<void> {
       // Check branch status
       let branchStatus;
       try {
-        branchStatus = await getTicketBranchStatus(config.repoPath, ticketId);
+        const status = await getTicketBranchStatus(config.repoPath, ticketId);
+        branchStatus = status || undefined; // Convert null to undefined
       } catch (error) {
         logger.debug(`Could not check branch status for ${ticketId}`);
       }
@@ -1208,7 +1209,7 @@ async function stepExtractCommitsForTickets(_git: SimpleGit, config: ReleaseNote
       
       // Search for commits containing this ticket ID
       try {
-        const gitCommand = `git log --all --oneline --grep="${ticket}" --no-merges`;
+        const gitCommand = `git log --all --pretty=format:"%H|%an|%ai|%s" --grep="${ticket}" --no-merges`;
         const gitOutput = execSync(gitCommand, {
           cwd: config.repoPath,
           encoding: 'utf-8'

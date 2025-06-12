@@ -1009,7 +1009,7 @@ export class HtmlGenerator {
                     </tr>
                 </thead>
                 <tbody>
-                    ${data.commits.map((commit, index) => {
+                    ${data.commits.map((commit) => {
                         const ticketMatch = commit.message.match(/([A-Z]+-\d+)/);
                         const ticketId = ticketMatch ? ticketMatch[1] : null;
                         const shortHash = commit.hash.substring(0, 8);
