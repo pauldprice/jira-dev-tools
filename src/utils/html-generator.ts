@@ -467,51 +467,52 @@ export class HtmlGenerator {
         /* Appendix */
         .appendix {
             page-break-before: always;
-            padding: 2em;
+            padding: 0.5em; /* Further reduced padding for maximum width */
             font-size: 9pt;
+            max-width: none; /* Remove any width constraints */
         }
         
         .commit-table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 8pt;
+            font-size: 7pt; /* Reduced from 8pt to 7pt */
             margin-top: 1em;
             table-layout: fixed;
         }
         
         .commit-table th,
         .commit-table td {
-            padding: 0.3em;
+            padding: 0.25em; /* Slightly reduced padding */
             text-align: left;
             border: 1px solid #ddd;
             word-wrap: break-word;
             overflow-wrap: break-word;
         }
         
-        /* Column widths for 5-column layout */
+        /* Column widths for 5-column layout - adjusted for better balance */
         .commit-table th:nth-child(1),
         .commit-table td:nth-child(1) {
-            width: 10%; /* Hash */
+            width: 10%; /* Hash - increased from 8% */
         }
         
         .commit-table th:nth-child(2),
         .commit-table td:nth-child(2) {
-            width: 15%; /* Author */
+            width: 15%; /* Author - unchanged */
         }
         
         .commit-table th:nth-child(3),
         .commit-table td:nth-child(3) {
-            width: 12%; /* Date */
+            width: 11%; /* Date - increased from 9% */
         }
         
         .commit-table th:nth-child(4),
         .commit-table td:nth-child(4) {
-            width: 53%; /* Message - largest column */
+            width: 54%; /* Message - reduced from 60% to accommodate other columns */
         }
         
         .commit-table th:nth-child(5),
         .commit-table td:nth-child(5) {
-            width: 10%; /* Ticket */
+            width: 10%; /* Ticket - increased from 8% */
         }
         
         .commit-table th {
@@ -521,7 +522,7 @@ export class HtmlGenerator {
         
         .commit-hash {
             font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 7pt;
+            font-size: 6pt; /* Even smaller for hash */
         }
         
         /* Print optimizations */
@@ -568,6 +569,15 @@ export class HtmlGenerator {
             @top-center {
                 content: none; /* No header on first page */
             }
+        }
+        
+        /* Special page margins for appendix to maximize table width */
+        @page appendix {
+            margin: 2cm 1cm 2cm 1cm; /* Reduced left/right margins from 2cm to 1cm */
+        }
+        
+        .appendix {
+            page: appendix; /* Use the special appendix page margins */
         }
     `;
   }
@@ -1025,12 +1035,13 @@ export class HtmlGenerator {
                         const ticketId = ticketMatch ? ticketMatch[1] : null;
                         const shortHash = commit.hash.substring(0, 8);
                         const commitLink = this.getCommitUrl(commit.hash);
-                        const formattedDate = commit.date ? new Date(commit.date).toLocaleDateString('en-US', { 
-                            month: 'short', 
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                        }) : '';
+                        const formattedDate = commit.date ? (() => {
+                            const date = new Date(commit.date);
+                            const month = date.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
+                            const day = date.getDate().toString().padStart(2, '0');
+                            const year = date.getFullYear().toString().slice(-2);
+                            return `${month} ${day}-${year}`;
+                        })() : '';
                         return `
                             <tr>
                                 <td class="commit-hash">${commitLink ? `<a href="${commitLink}" target="_blank" style="color: #2c3e50;">${shortHash}</a>` : shortHash}</td>

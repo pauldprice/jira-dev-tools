@@ -230,6 +230,8 @@ Example usage:
 ./toolbox release-notes --repo /Users/paul/code/gather/webapp --ai-model sonnet --pdf
 ```
 
+**Test Version**: V17.02.00 has been used for testing Fix Version mode functionality.
+
 **Important**: Product managers must set the Fix Version field in JIRA for both modes to work correctly.
 
 ## PDF Analysis
