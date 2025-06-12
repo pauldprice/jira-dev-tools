@@ -57,6 +57,158 @@ export function getTicketCommitsAllBranches(repoPath: string, ticketId: string):
 }
 
 /**
+ * Find branches that contain commits for a specific ticket
+ */
+export function getTicketBranches(repoPath: string, ticketId: string): string[] {
+  try {
+    // Get all branches (both local and remote)
+    const allBranches = execSync(
+      'git branch -a --format="%(refname:short)"',
+      { cwd: repoPath, encoding: 'utf-8' }
+    ).trim().split('\n').filter(Boolean);
+    
+    // First, look for branches with the ticket ID in their name
+    const ticketBranches = allBranches.filter(branch => 
+      branch.toUpperCase().includes(ticketId.toUpperCase())
+    );
+    
+    if (ticketBranches.length > 0) {
+      logger.debug(`Found ${ticketBranches.length} branches with ticket ID ${ticketId} in name`);
+      return ticketBranches
+        .filter(branch => !branch.includes('master') && !branch.includes('main'))
+        .sort();
+    }
+    
+    // Fallback: find branches that contain commits for this ticket
+    const commits = getTicketCommitsAllBranches(repoPath, ticketId);
+    if (commits.length === 0) return [];
+    
+    const branchesWithTicket = new Set<string>();
+    
+    // Check first few commits for efficiency
+    for (const commit of commits.slice(0, 3)) {
+      try {
+        const branches = execSync(
+          `git branch -a --contains ${commit} --format="%(refname:short)"`,
+          { cwd: repoPath, encoding: 'utf-8' }
+        ).trim().split('\n').filter(Boolean);
+        
+        branches.forEach(branch => branchesWithTicket.add(branch));
+      } catch (error) {
+        // Commit might not exist in some branches
+      }
+    }
+    
+    // Filter out master/main branches and return the feature branches
+    return Array.from(branchesWithTicket)
+      .filter(branch => !branch.includes('master') && !branch.includes('main'))
+      .sort();
+  } catch (error: any) {
+    logger.debug(`Failed to find branches for ticket ${ticketId}: ${error.message}`);
+    return [];
+  }
+}
+
+/**
+ * Get diff between a branch and target branch (like a PR diff)
+ */
+export async function getBranchDiff(
+  repoPath: string,
+  sourceBranch: string,
+  targetBranch: string = 'origin/master',
+  ticketId?: string
+): Promise<CodeDiff | null> {
+  try {
+    // Get the merge base
+    const mergeBase = execSync(
+      `git merge-base ${targetBranch} ${sourceBranch}`,
+      { cwd: repoPath, encoding: 'utf-8' }
+    ).trim();
+    
+    // Get diff stats
+    const diffStat = execSync(
+      `git diff --stat ${mergeBase}..${sourceBranch}`,
+      { cwd: repoPath, encoding: 'utf-8' }
+    );
+    
+    // Parse stats
+    const statsMatch = diffStat.match(/(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?/);
+    const totalFiles = parseInt(statsMatch?.[1] || '0');
+    const totalInsertions = parseInt(statsMatch?.[2] || '0');
+    const totalDeletions = parseInt(statsMatch?.[3] || '0');
+    
+    // Get file list with changes
+    const fileList = execSync(
+      `git diff --name-status ${mergeBase}..${sourceBranch}`,
+      { cwd: repoPath, encoding: 'utf-8' }
+    ).trim().split('\n').filter(Boolean);
+    
+    const files: FileDiff[] = [];
+    const importantExtensions = /\.(ts|tsx|js|jsx|vue|py|go|java|cs|rb|php|sql)$/;
+    
+    for (const line of fileList) {
+      const [status, ...pathParts] = line.split('\t');
+      const filePath = pathParts.join('\t');
+      
+      // Determine change type
+      let changeType: FileDiff['changeType'] = 'modified';
+      if (status === 'A') changeType = 'added';
+      else if (status === 'D') changeType = 'deleted';
+      else if (status.startsWith('R')) changeType = 'renamed';
+      
+      // Get detailed stats for this file
+      let additions = 0;
+      let deletions = 0;
+      let diff = '';
+      
+      if (changeType !== 'deleted' && importantExtensions.test(filePath) && files.length < 20) {
+        try {
+          const fileDiff = execSync(
+            `git diff ${mergeBase}..${sourceBranch} -- "${filePath}"`,
+            { cwd: repoPath, encoding: 'utf-8', maxBuffer: 1 * 1024 * 1024 }
+          );
+          
+          // Count additions and deletions
+          const lines = fileDiff.split('\n');
+          additions = lines.filter(l => l.startsWith('+')).length;
+          deletions = lines.filter(l => l.startsWith('-')).length;
+          
+          // Get a sample of the diff
+          diff = lines
+            .filter(l => l.startsWith('+') || l.startsWith('-'))
+            .slice(0, 100)
+            .join('\n');
+        } catch (error) {
+          logger.debug(`Could not get diff for ${filePath}`);
+        }
+      }
+      
+      files.push({
+        path: filePath,
+        changeType,
+        additions,
+        deletions,
+        diff
+      });
+    }
+    
+    return {
+      ticketId: ticketId || sourceBranch,
+      files,
+      stats: {
+        filesChanged: totalFiles,
+        insertions: totalInsertions,
+        deletions: totalDeletions
+      },
+      rawDiff: '' // We don't need the full raw diff for branch comparisons
+    };
+  } catch (error: any) {
+    logger.error(`Failed to get branch diff: ${error.message}`);
+    return null;
+  }
+}
+
+/**
  * Get the code diff for all commits related to a ticket
  */
 export async function getTicketCodeDiff(
@@ -66,6 +218,21 @@ export async function getTicketCodeDiff(
   allBranches: boolean = false
 ): Promise<CodeDiff | null> {
   try {
+    // In version mode, try to find branches and use branch diff
+    if (allBranches) {
+      const ticketBranches = getTicketBranches(repoPath, ticketId);
+      
+      if (ticketBranches.length > 0) {
+        // Use the first branch found (ideally the feature branch)
+        const sourceBranch = ticketBranches[0];
+        logger.info(`Using branch diff for ${ticketId}: ${sourceBranch} vs ${targetBranch}`);
+        return getBranchDiff(repoPath, sourceBranch, targetBranch, ticketId);
+      }
+      
+      logger.info(`No branches found for ${ticketId}, falling back to commit-based diff`);
+    }
+    
+    // Original commit-based approach
     const commits = allBranches 
       ? getTicketCommitsAllBranches(repoPath, ticketId)
       : getTicketCommits(repoPath, ticketId, targetBranch);

@@ -25,6 +25,11 @@ Added a new mode to generate release notes based on JIRA Fix Version instead of 
 - Searches git log across ALL branches for commits containing ticket IDs
 - Maintains all existing features (AI analysis, PDF generation, etc.)
 
+### Known Limitations
+- Very large tickets (100+ commits, 300+ files) may have incomplete AI analysis due to Claude API context limitations
+- The AI summary might be truncated or generic for tickets with extensive changes
+- Consider breaking up large releases into smaller fix versions for better analysis
+
 ## 0.1. Release Version Detection from JIRA Tickets ✅ IMPLEMENTED
 
 ### Summary
