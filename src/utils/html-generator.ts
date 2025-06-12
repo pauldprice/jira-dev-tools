@@ -488,19 +488,30 @@ export class HtmlGenerator {
             overflow-wrap: break-word;
         }
         
-        .commit-table th:first-child,
-        .commit-table td:first-child {
-            width: 15%;
+        /* Column widths for 5-column layout */
+        .commit-table th:nth-child(1),
+        .commit-table td:nth-child(1) {
+            width: 10%; /* Hash */
         }
         
         .commit-table th:nth-child(2),
         .commit-table td:nth-child(2) {
-            width: 70%;
+            width: 15%; /* Author */
         }
         
-        .commit-table th:last-child,
-        .commit-table td:last-child {
-            width: 15%;
+        .commit-table th:nth-child(3),
+        .commit-table td:nth-child(3) {
+            width: 12%; /* Date */
+        }
+        
+        .commit-table th:nth-child(4),
+        .commit-table td:nth-child(4) {
+            width: 53%; /* Message - largest column */
+        }
+        
+        .commit-table th:nth-child(5),
+        .commit-table td:nth-child(5) {
+            width: 10%; /* Ticket */
         }
         
         .commit-table th {
