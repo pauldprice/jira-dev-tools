@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
-import { logger, progress, FileSystem, config as appConfig, HtmlGenerator, getTicketCodeDiff, ParallelProcessor, PDFGenerator, fetchJiraTicketCached, createCachedClaudeClient } from '../utils';
+import { logger, progress, FileSystem, config as appConfig, HtmlGenerator, getTicketCodeDiff, ParallelProcessor, PDFGenerator, fetchJiraTicketCached, createCachedClaudeClient, searchJiraTickets } from '../utils';
 import type { ReleaseNotesData, TicketInfo, CommitInfo, JiraCredentials } from '../utils';
 import simpleGit, { SimpleGit } from 'simple-git';
 import * as path from 'path';
@@ -22,14 +22,17 @@ interface ReleaseNotesConfig {
   pdfFile?: string;
   debugLimit?: number;
   releaseVersion?: string;
+  fixVersion?: string;
+  mode?: 'branch' | 'version';
 }
 
 const program = new Command();
 
 program
   .name('generate-release-notes')
-  .description('Generate release notes from git commits between branches')
+  .description('Generate release notes from git commits between branches or from JIRA Fix Version')
   .option('--version <version>', 'release version (e.g., V17.01.00)')
+  .option('--fix-version <version>', 'generate notes for all tickets with this JIRA Fix Version')
   .option('-p, --repo <path>', 'path to git repository (default: current directory)', process.cwd())
   .option('-s, --source <branch>', 'source branch with new commits (default: origin/test)', 'origin/test')
   .option('-t, --target <branch>', 'target branch to compare against (default: origin/master)', 'origin/master')
@@ -64,6 +67,14 @@ program
       // We'll determine the version later if not specified
       let temporaryFileName = 'release_notes_temp.html';
       
+      // Determine mode based on parameters
+      const mode = options.fixVersion ? 'version' : 'branch';
+      
+      if (mode === 'version' && options.noJira) {
+        logger.error('Fix version mode requires JIRA integration. Remove --no-jira flag.');
+        process.exit(1);
+      }
+      
       const config: ReleaseNotesConfig = {
         repoPath,
         sourceBranch: options.source,
@@ -79,11 +90,19 @@ program
         generatePDF: options.pdf || options.pdfOnly || false,
         pdfFile: '',  // Will be set later
         debugLimit: options.debug,
-        releaseVersion: options.version,
+        releaseVersion: options.version || options.fixVersion,
+        fixVersion: options.fixVersion,
+        mode,
       };
 
       logger.info(`Repository: ${config.repoPath}`);
-      logger.info(`Branches: ${config.targetBranch}..${config.sourceBranch}`);
+      if (config.mode === 'branch') {
+        logger.info(`Mode: Branch comparison`);
+        logger.info(`Branches: ${config.targetBranch}..${config.sourceBranch}`);
+      } else {
+        logger.info(`Mode: Fix Version`);
+        logger.info(`Fix Version: ${config.fixVersion}`);
+      }
       
       if (config.debugLimit) {
         logger.info(`Debug mode: Processing only ${config.debugLimit} tickets`);
@@ -102,8 +121,10 @@ program
       // Initialize git
       const git: SimpleGit = simpleGit(config.repoPath);
 
-      // Check if branches exist
-      await validateBranches(git, config);
+      // Check if branches exist (only in branch mode)
+      if (config.mode === 'branch') {
+        await validateBranches(git, config);
+      }
 
       // Initialize work directory
       await FileSystem.ensureDir(config.workDir);
@@ -241,10 +262,18 @@ async function cleanWorkspace(config: ReleaseNotesConfig): Promise<void> {
 async function runStep(step: string, git: SimpleGit, config: ReleaseNotesConfig): Promise<void> {
   switch (step) {
     case 'fetch':
-      await stepFetchCommits(git, config);
+      if (config.mode === 'version') {
+        await stepFetchTicketsByVersion(config);
+      } else {
+        await stepFetchCommits(git, config);
+      }
       break;
     case 'extract':
-      await stepExtractTickets(config);
+      if (config.mode === 'version') {
+        await stepExtractCommitsForTickets(git, config);
+      } else {
+        await stepExtractTickets(config);
+      }
       break;
     case 'categorize':
       await stepCategorizeTickets(config);
@@ -892,8 +921,8 @@ async function stepGenerateNotes(config: ReleaseNotesConfig): Promise<void> {
     date: format(new Date(), 'MMMM d, yyyy'),
     version: dominantVersion,
     branch: {
-      source: config.sourceBranch,
-      target: config.targetBranch
+      source: config.mode === 'version' ? `Fix Version: ${config.fixVersion}` : config.sourceBranch,
+      target: config.mode === 'version' ? 'All branches' : config.targetBranch
     },
     stats: {
       totalCommits: commits.length,
@@ -1007,6 +1036,128 @@ function extractVersionFromTicketData(ticketData: any): string | undefined {
   }
 
   return undefined;
+}
+
+// New step functions for Fix Version mode
+async function stepFetchTicketsByVersion(config: ReleaseNotesConfig): Promise<void> {
+  logger.header('Step 1: Fetching Tickets by Fix Version');
+  
+  if (!config.fixVersion) {
+    throw new Error('Fix version is required for version mode');
+  }
+  
+  const outputFile = path.join(config.workDir, 'tickets.txt');
+  
+  if (FileSystem.exists(outputFile)) {
+    logger.info('Using cached tickets');
+    return;
+  }
+  
+  progress.start(`Searching for tickets with Fix Version: ${config.fixVersion}`);
+  
+  try {
+    // Get JIRA config
+    const jiraConfig = appConfig.getJiraConfig();
+    if (!jiraConfig) {
+      throw new Error('JIRA configuration not found');
+    }
+    
+    // Build JQL query
+    const jql = `project = ${config.jiraProject} AND fixVersion = "${config.fixVersion}"`;
+    
+    // Search for tickets
+    const issues = await searchJiraTickets(jql, jiraConfig, {
+      maxResults: 500,
+      fields: ['key', 'summary', 'status', 'fixVersions']
+    });
+    
+    // Extract ticket IDs
+    const ticketIds = issues.map(issue => issue.key);
+    
+    // Apply debug limit if specified
+    let finalTickets = ticketIds;
+    if (config.debugLimit && ticketIds.length > config.debugLimit) {
+      const originalCount = ticketIds.length;
+      finalTickets = ticketIds.slice(0, config.debugLimit);
+      logger.info(`Debug mode: Limited from ${originalCount} to ${finalTickets.length} tickets`);
+    }
+    
+    // Save to file
+    await FileSystem.writeFile(outputFile, finalTickets.join('\n'));
+    
+    progress.succeed(`Found ${finalTickets.length} tickets with Fix Version ${config.fixVersion}`);
+    
+    if (config.verbose && finalTickets.length > 0) {
+      logger.info(`Tickets: ${finalTickets.join(', ')}`);
+    }
+  } catch (error) {
+    progress.fail();
+    throw error;
+  }
+}
+
+async function stepExtractCommitsForTickets(_git: SimpleGit, config: ReleaseNotesConfig): Promise<void> {
+  logger.header('Step 2: Extracting Commits for Tickets');
+  
+  const ticketsFile = path.join(config.workDir, 'tickets.txt');
+  const outputFile = path.join(config.workDir, 'commits.txt');
+  
+  if (!FileSystem.exists(ticketsFile)) {
+    throw new Error('tickets.txt not found. Run fetch step first.');
+  }
+  
+  if (FileSystem.exists(outputFile)) {
+    logger.info('Using cached commits');
+    return;
+  }
+  
+  progress.start('Extracting commits for tickets...');
+  
+  try {
+    const tickets = (await FileSystem.readFile(ticketsFile)).split('\n').filter(Boolean);
+    const allCommits: string[] = [];
+    
+    // Get all commits from the repository
+    const { execSync } = await import('child_process');
+    
+    for (const ticket of tickets) {
+      if (config.verbose) {
+        progress.update(`Searching commits for ${ticket}`);
+      }
+      
+      // Search for commits containing this ticket ID
+      try {
+        const gitCommand = `git log --all --oneline --grep="${ticket}" --no-merges`;
+        const gitOutput = execSync(gitCommand, {
+          cwd: config.repoPath,
+          encoding: 'utf-8'
+        }).trim();
+        
+        if (gitOutput) {
+          const commits = gitOutput.split('\n').filter(line => line.trim());
+          allCommits.push(...commits);
+        }
+      } catch (error) {
+        // Ignore if no commits found for a ticket
+        logger.debug(`No commits found for ${ticket}`);
+      }
+    }
+    
+    // Remove duplicates
+    const uniqueCommits = [...new Set(allCommits)];
+    
+    await FileSystem.writeFile(outputFile, uniqueCommits.join('\n'));
+    
+    progress.succeed(`Found ${uniqueCommits.length} commits for ${tickets.length} tickets`);
+    
+    if (config.verbose && uniqueCommits.length > 0) {
+      logger.info('First 5 commits:');
+      uniqueCommits.slice(0, 5).forEach(c => console.log(`  ${c}`));
+    }
+  } catch (error) {
+    progress.fail();
+    throw error;
+  }
 }
 
 program.parse();

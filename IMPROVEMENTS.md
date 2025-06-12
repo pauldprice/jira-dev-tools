@@ -2,7 +2,30 @@
 
 Based on the test run, here are potential improvements that could be made:
 
-## 0. Release Version Detection from JIRA Tickets ✅ IMPLEMENTED
+## 0. Fix Version Mode ✅ IMPLEMENTED
+
+### Summary
+Added a new mode to generate release notes based on JIRA Fix Version instead of branch comparison. This allows:
+1. Generating notes for a specific version across all branches
+2. Including tickets that may have already been merged to master
+3. Better alignment with JIRA release planning
+
+### Usage
+```bash
+# Fix Version mode
+./toolbox release-notes --repo /path/to/repo --fix-version V17.02.00 --ai-model sonnet --pdf
+
+# Traditional branch mode (default)
+./toolbox release-notes --repo /path/to/repo --ai-model sonnet --pdf
+```
+
+### Implementation
+- Added `--fix-version` parameter to specify the version
+- Uses JIRA REST API to search for tickets: `project = APP AND fixVersion = "V17.02.00"`
+- Searches git log across ALL branches for commits containing ticket IDs
+- Maintains all existing features (AI analysis, PDF generation, etc.)
+
+## 0.1. Release Version Detection from JIRA Tickets ✅ IMPLEMENTED
 
 ### Summary
 Implemented automatic release version detection from JIRA tickets. The system now:

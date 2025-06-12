@@ -249,6 +249,45 @@ function formatForLLM(issue: JiraIssue, comments: JiraComment[], baseUrl: string
   };
 }
 
+// Search for tickets using JQL
+export async function searchJiraTickets(
+  jql: string,
+  config: JiraCredentials,
+  options: {
+    maxResults?: number;
+    fields?: string[];
+  } = {}
+): Promise<JiraIssue[]> {
+  const { maxResults = 100, fields = ['summary', 'status', 'assignee', 'fixVersions'] } = options;
+  
+  // Create Jira client
+  const client = createJiraClient(
+    config.JIRA_BASE_URL,
+    config.JIRA_EMAIL,
+    config.JIRA_API_TOKEN
+  );
+
+  logger.debug(`Searching JIRA with JQL: ${jql}`);
+
+  try {
+    const response = await client.get<{
+      issues: JiraIssue[];
+      total: number;
+      maxResults: number;
+    }>(
+      `/rest/api/3/search?jql=${encodeURIComponent(jql)}&maxResults=${maxResults}&fields=${fields.join(',')}`
+    );
+
+    logger.debug(`Found ${response.issues.length} issues`);
+    return response.issues;
+  } catch (error: any) {
+    if (error.response?.status === 400) {
+      throw new Error(`Invalid JQL query: ${jql}`);
+    }
+    throw error;
+  }
+}
+
 // Main function to fetch Jira ticket
 export async function fetchJiraTicket(
   ticketId: string, 

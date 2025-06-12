@@ -156,8 +156,11 @@ Note: Environment variables always take precedence over config files.
 # Generate with specific version
 ./toolbox release-notes --repo /Users/paul/code/gather/webapp --version V17.01.00 --ai-model sonnet --pdf
 
-# Generate without version (auto-detect from tickets)
+# Generate without version (auto-detect from tickets in branch mode)
 ./toolbox release-notes --repo /Users/paul/code/gather/webapp --ai-model sonnet --pdf
+
+# Generate for specific Fix Version (searches all branches)
+./toolbox release-notes --repo /Users/paul/code/gather/webapp --fix-version V17.02.00 --ai-model sonnet --pdf
 
 # Manage cache
 ./toolbox cache stats
@@ -197,14 +200,34 @@ Cache is stored in `.toolbox_cache/` by default and can be managed via the cache
 
 ## Version Detection from JIRA
 
-The release notes generator can automatically detect the release version from JIRA tickets:
+The release notes generator supports two modes for generating release notes:
+
+### Branch Mode (Default)
+Compares commits between two branches (e.g., test vs master) and detects version from tickets:
 
 1. **Fix Version Field**: The tool looks for the `fixVersions` field in JIRA tickets
 2. **Majority Voting**: If multiple tickets have different versions, the most common version wins
 3. **Version Mismatch Warning**: Tickets without the dominant version show a warning (⚠️)
-4. **Automatic File Naming**: Generated files are named with the detected version (e.g., `release_notes_V17.01.00_2025-06-11.pdf`)
+4. **Automatic File Naming**: Generated files are named with the detected version
 
-**Important**: Product managers must set the Fix Version field in JIRA for automatic version detection to work.
+### Fix Version Mode (New!)
+Generates release notes for all tickets with a specific Fix Version:
+
+1. **JIRA Query**: Searches for all tickets with the specified Fix Version
+2. **Cross-Branch**: Finds commits across ALL branches (not limited to test branch)
+3. **Complete Coverage**: Includes tickets that may have already been merged to master
+4. **Version Consistency**: All tickets are guaranteed to have the same version
+
+Example usage:
+```bash
+# Fix Version mode - find all tickets with V17.02.00
+./toolbox release-notes --repo /Users/paul/code/gather/webapp --fix-version V17.02.00 --ai-model sonnet --pdf
+
+# Branch mode - compare test vs master (default)
+./toolbox release-notes --repo /Users/paul/code/gather/webapp --ai-model sonnet --pdf
+```
+
+**Important**: Product managers must set the Fix Version field in JIRA for both modes to work correctly.
 
 ## PDF Analysis
 
