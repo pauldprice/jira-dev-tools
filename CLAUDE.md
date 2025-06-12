@@ -60,6 +60,7 @@ Note: Environment variables always take precedence over config files.
 
 ### Utilities
 - `jira-client.ts`: Shared Jira API functionality
+- `bitbucket-client.ts`: Bitbucket API for pull request detection
 - `git-diff.ts`: Git diff extraction for specific tickets
 - `claude-client.ts`: AI integration for code analysis
 - `parallel-processor.ts`: Concurrent API request handling
@@ -233,6 +234,25 @@ Example usage:
 **Test Version**: V17.02.00 has been used for testing Fix Version mode functionality.
 
 **Important**: Product managers must set the Fix Version field in JIRA for both modes to work correctly.
+
+## Bitbucket Integration
+
+The release notes generator automatically detects and links to Bitbucket pull requests:
+
+### Features
+- **Automatic PR Detection**: Searches for PRs by ticket ID in branch names and PR titles
+- **PR Status Display**: Shows PR state (OPEN, MERGED, DECLINED, SUPERSEDED)
+- **Direct Links**: Clickable links to view PRs in Bitbucket
+- **Cached Requests**: API calls are cached for 5 minutes to improve performance
+
+### Configuration
+- Uses the same JIRA_API_TOKEN (Atlassian API token)
+- Automatically parses workspace and repository from git remote URL
+- Works with both SSH and HTTPS git remotes
+
+### Display
+Pull requests appear in the ticket metadata section:
+- 🔗 PR #123 (MERGED) - with direct link to Bitbucket
 
 ## PDF Analysis
 

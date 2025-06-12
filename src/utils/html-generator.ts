@@ -53,6 +53,12 @@ export interface TicketInfo {
     hasRemoteBranch: boolean;
     branchNames: string[];
   };
+  pullRequests?: {
+    id: number;
+    title: string;
+    state: string;
+    url: string;
+  }[];
 }
 
 export interface CommitInfo {
@@ -935,6 +941,15 @@ export class HtmlGenerator {
                 ${ticket.branchStatus && ticket.branchStatus.hasRemoteBranch ? `
                 <div style="color: #27ae60; font-weight: bold; margin-left: 1em;">
                     🌿 ${ticket.branchStatus.branchNames.length > 0 ? 'Has unmerged branch' : 'Branch merged'}
+                </div>
+                ` : ''}
+                ${ticket.pullRequests && ticket.pullRequests.length > 0 ? `
+                <div style="margin-left: 1em;">
+                    ${ticket.pullRequests.map(pr => `
+                        <a href="${pr.url}" target="_blank" style="color: #2980b9; text-decoration: none; font-weight: bold;">
+                            🔗 PR #${pr.id} (${pr.state})
+                        </a>
+                    `).join(' ')}
                 </div>
                 ` : ''}
                 ${data.version && (!ticket.releaseVersion || ticket.releaseVersion !== data.version) ? `

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
-import { logger, progress, FileSystem, config as appConfig, HtmlGenerator, getTicketCodeDiff, getTicketBranchStatus, ParallelProcessor, PDFGenerator, fetchJiraTicketCached, createCachedClaudeClient, searchJiraTickets } from '../utils';
+import { logger, progress, FileSystem, config as appConfig, HtmlGenerator, getTicketCodeDiff, getTicketBranchStatus, ParallelProcessor, PDFGenerator, fetchJiraTicketCached, createCachedClaudeClient, searchJiraTickets, BitbucketClient } from '../utils';
 import type { ReleaseNotesData, TicketInfo, CommitInfo, JiraCredentials } from '../utils';
 import simpleGit, { SimpleGit } from 'simple-git';
 import * as path from 'path';
@@ -849,6 +849,26 @@ async function stepGenerateNotes(config: ReleaseNotesConfig): Promise<void> {
   // Track all ticket versions for version detection
   const ticketVersions: Record<string, number> = {};
 
+  // Initialize Bitbucket client if we have a repo URL
+  let bitbucketClient: BitbucketClient | null = null;
+  if (config.verbose) {
+    logger.info(`Repository URL: ${repoUrl || 'not detected'}`);
+  }
+  if (repoUrl && repoUrl.includes('bitbucket.org')) {
+    const repoInfo = BitbucketClient.parseRepoUrl(repoUrl);
+    if (repoInfo) {
+      logger.info(`Initializing Bitbucket client for ${repoInfo.workspace}/${repoInfo.repoSlug}`);
+      bitbucketClient = new BitbucketClient({
+        workspace: repoInfo.workspace,
+        repoSlug: repoInfo.repoSlug
+      });
+    } else {
+      logger.warn('Could not parse Bitbucket repository info from URL');
+    }
+  } else if (config.verbose) {
+    logger.info('Not a Bitbucket repository, PR detection disabled');
+  }
+
   // Process each category
   for (const [category, ticketIds] of Object.entries(categories)) {
     const mappedCategory = categoryMap[category];
@@ -913,6 +933,27 @@ async function stepGenerateNotes(config: ReleaseNotesConfig): Promise<void> {
         logger.debug(`Could not check branch status for ${ticketId}`);
       }
 
+      // Check for pull requests
+      let pullRequests;
+      if (bitbucketClient) {
+        try {
+          const prs = await bitbucketClient.getPullRequestsForTicket(ticketId);
+          if (prs.length > 0) {
+            pullRequests = prs.map(pr => ({
+              id: pr.id,
+              title: pr.title,
+              state: pr.state,
+              url: pr.links.html.href
+            }));
+            if (config.verbose) {
+              logger.info(`Found ${prs.length} pull request(s) for ${ticketId}`);
+            }
+          }
+        } catch (error: any) {
+          logger.debug(`Could not fetch PRs for ${ticketId}: ${error.message}`);
+        }
+      }
+
       const ticketInfo: TicketInfo = {
         id: ticketId,
         title: details?.title || ticketCommits[0]?.message || 'No title',
@@ -924,7 +965,8 @@ async function stepGenerateNotes(config: ReleaseNotesConfig): Promise<void> {
         risks,
         diffStats,
         releaseVersion,
-        branchStatus
+        branchStatus,
+        pullRequests
       };
 
       categorizedTickets[mappedCategory].push(ticketInfo);

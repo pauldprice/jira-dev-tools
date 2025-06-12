@@ -14,3 +14,4 @@ export * from './cache-manager';
 export * from './cached-fetch';
 export * from './cached-claude';
 export * from './cached-jira';
+export * from './bitbucket-client';
