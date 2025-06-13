@@ -47,3 +47,11 @@ release_notes_*.html
 # Temporary files
 *.tmp
 .tmp/
+
+# Test coverage
+coverage/
+*.lcov
+.nyc_output/
+
+# Test artifacts
+**/__tests__/.test-work/

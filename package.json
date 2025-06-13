@@ -7,6 +7,13 @@
     "dev": "ts-node",
     "build": "tsc",
     "clean": "rm -rf dist",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:unit": "jest --selectProjects=node",
+    "test:react": "jest --selectProjects=react",
+    "test:integration": "jest --testMatch='**/*.integration.test.ts'",
+    "test:ci": "jest --ci --coverage --maxWorkers=2",
     "fetch-jira": "ts-node src/tools/fetch-jira-ticket.ts",
     "fetch-attachment": "ts-node src/tools/fetch-jira-attachment.ts",
     "release-notes": "ts-node src/tools/generate-release-notes.ts",
@@ -38,7 +45,13 @@
     "simple-git": "^3.19.1"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.3.0",
+    "@types/jest": "^29.5.14",
     "@types/node": "^20.8.0",
+    "jest": "^30.0.0",
+    "jest-environment-jsdom": "^30.0.0",
+    "ts-jest": "^29.4.0",
     "ts-node": "^10.9.1",
     "typescript": "^5.2.2"
   },
