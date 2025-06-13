@@ -8,10 +8,20 @@ process.env.NODE_ENV = 'test';
 const originalConsole = { ...console };
 
 beforeAll(() => {
-  // Suppress console.log and console.info during tests
+  // Suppress console output during tests
   console.log = jest.fn();
   console.info = jest.fn();
-  // Keep console.error and console.warn for debugging
+  console.warn = jest.fn();
+  
+  // Suppress specific console.error messages
+  const originalError = console.error;
+  console.error = (...args: any[]) => {
+    // Suppress jsdom CSS parsing errors
+    if (args[0]?.toString().includes('Could not parse CSS stylesheet')) {
+      return;
+    }
+    originalError.call(console, ...args);
+  };
 });
 
 afterAll(() => {

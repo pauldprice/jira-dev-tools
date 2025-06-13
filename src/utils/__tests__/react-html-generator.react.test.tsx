@@ -1,21 +1,6 @@
 import '@testing-library/jest-dom';
 import { ReactHtmlGenerator, ReleaseNotesData } from '../react-html-generator';
 
-// Suppress CSS parsing errors from jsdom
-const originalError = console.error;
-beforeAll(() => {
-  console.error = (...args: any[]) => {
-    if (args[0]?.toString().includes('Could not parse CSS stylesheet')) {
-      return;
-    }
-    originalError.call(console, ...args);
-  };
-});
-
-afterAll(() => {
-  console.error = originalError;
-});
-
 describe('ReactHtmlGenerator Components', () => {
   const mockReleaseData: ReleaseNotesData = {
     title: 'Release Notes - V17.02.00',
