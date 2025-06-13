@@ -478,7 +478,7 @@ export async function getTicketBranchStatus(
       }
       
       return {
-        hasRemoteBranch: true,
+        hasRemoteBranch: unmergedBranches.length > 0,
         branchNames: unmergedBranches.length > 0 ? unmergedBranches : ticketBranches
       };
     }

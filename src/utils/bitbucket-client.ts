@@ -5,9 +5,13 @@ import { cachedFetch } from './cached-fetch';
 export interface BitbucketPullRequest {
   id: number;
   title: string;
+  description?: string;
   state: 'OPEN' | 'MERGED' | 'DECLINED' | 'SUPERSEDED';
   created_on: string;
   updated_on: string;
+  merge_commit?: {
+    hash: string;
+  };
   source: {
     branch: {
       name: string;
@@ -26,6 +30,16 @@ export interface BitbucketPullRequest {
   author: {
     display_name: string;
   };
+  participants?: Array<{
+    user: {
+      display_name: string;
+    };
+    role: 'PARTICIPANT' | 'REVIEWER';
+    approved: boolean;
+  }>;
+  reviewers?: Array<{
+    display_name: string;
+  }>;
 }
 
 export interface BitbucketConfig {
@@ -152,6 +166,40 @@ export class BitbucketClient {
       });
     }
     return filtered;
+  }
+
+  /**
+   * Get detailed information about a specific pull request
+   */
+  async getPullRequestDetails(prId: number): Promise<BitbucketPullRequest | null> {
+    if (!this.apiToken) {
+      return null;
+    }
+
+    try {
+      const url = `${this.baseUrl}/repositories/${this.workspace}/${this.repoSlug}/pullrequests/${prId}`;
+      
+      const response = await cachedFetch.fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${this.apiToken}`,
+          'Accept': 'application/json'
+        },
+        cache: {
+          namespace: 'bitbucket',
+          ttl: 5 * 60 * 1000 // Cache for 5 minutes
+        }
+      });
+
+      if (!response.ok) {
+        logger.warn(`Failed to fetch PR details for #${prId}: ${response.status}`);
+        return null;
+      }
+
+      return await response.json() as BitbucketPullRequest;
+    } catch (error: any) {
+      logger.debug(`Failed to get PR details: ${error.message}`);
+      return null;
+    }
   }
 
   /**

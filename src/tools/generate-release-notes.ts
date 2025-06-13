@@ -939,14 +939,47 @@ async function stepGenerateNotes(config: ReleaseNotesConfig): Promise<void> {
         try {
           const prs = await bitbucketClient.getPullRequestsForTicket(ticketId);
           if (prs.length > 0) {
-            pullRequests = prs.map(pr => ({
-              id: pr.id,
-              title: pr.title,
-              state: pr.state,
-              url: pr.links.html.href
+            // Fetch detailed information for each PR
+            pullRequests = await Promise.all(prs.map(async (pr) => {
+              const details = await bitbucketClient.getPullRequestDetails(pr.id);
+              if (details) {
+                // Count approvals
+                const approvals = details.participants?.filter(p => p.approved) || [];
+                const reviewers = details.participants?.filter(p => p.role === 'REVIEWER') || [];
+                
+                return {
+                  id: pr.id,
+                  title: pr.title,
+                  state: pr.state,
+                  url: pr.links.html.href,
+                  description: details.description,
+                  author: details.author.display_name,
+                  reviewers: reviewers.map(r => ({
+                    name: r.user.display_name,
+                    approved: r.approved
+                  })),
+                  approvalStatus: {
+                    approved: approvals.length,
+                    total: reviewers.length
+                  }
+                };
+              } else {
+                // Fallback if details fetch fails
+                return {
+                  id: pr.id,
+                  title: pr.title,
+                  state: pr.state,
+                  url: pr.links.html.href
+                };
+              }
             }));
             if (config.verbose) {
               logger.info(`Found ${prs.length} pull request(s) for ${ticketId}`);
+              pullRequests.forEach(pr => {
+                if (pr.approvalStatus) {
+                  logger.info(`  PR #${pr.id}: ${pr.approvalStatus.approved}/${pr.approvalStatus.total} approved`);
+                }
+              });
             }
           }
         } catch (error: any) {

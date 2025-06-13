@@ -58,6 +58,16 @@ export interface TicketInfo {
     title: string;
     state: string;
     url: string;
+    description?: string;
+    author?: string;
+    reviewers?: Array<{
+      name: string;
+      approved: boolean;
+    }>;
+    approvalStatus?: {
+      approved: number;
+      total: number;
+    };
   }[];
 }
 
@@ -939,19 +949,19 @@ export class HtmlGenerator {
                 </div>
                 ` : ''}
                 ${ticket.branchStatus && ticket.branchStatus.hasRemoteBranch ? `
-                <div style="color: #27ae60; font-weight: bold; margin-left: 1em;">
-                    🌿 ${ticket.branchStatus.branchNames.length > 0 ? 'Has unmerged branch' : 'Branch merged'}
+                <div style="color: #f39c12; font-weight: bold; margin-left: 1em;">
+                    🌿 Has unmerged branch${ticket.branchStatus.branchNames.length > 0 ? `: ${ticket.branchStatus.branchNames[0]}` : ''}
                 </div>
                 ` : ''}
-                ${ticket.pullRequests && ticket.pullRequests.length > 0 ? `
+                ${ticket.pullRequests && ticket.pullRequests.length > 0 ? ticket.pullRequests.map(pr => `
                 <div style="margin-left: 1em;">
-                    ${ticket.pullRequests.map(pr => `
-                        <a href="${pr.url}" target="_blank" style="color: #2980b9; text-decoration: none; font-weight: bold;">
-                            🔗 PR #${pr.id} (${pr.state})
-                        </a>
-                    `).join(' ')}
+                    <a href="${pr.url}" target="_blank" style="color: #2980b9; text-decoration: none; font-weight: bold;">
+                        🔗 PR #${pr.id} (${pr.state})
+                    </a>
+                    ${pr.author ? ` by ${pr.author}` : ''}
+                    ${pr.approvalStatus ? ` - ${pr.approvalStatus.approved}/${pr.approvalStatus.total} approved` : ''}
                 </div>
-                ` : ''}
+                `).join('') : ''}
                 ${data.version && (!ticket.releaseVersion || ticket.releaseVersion !== data.version) ? `
                 <div class="version-mismatch" style="color: #e74c3c; font-weight: bold; margin-left: 1em;">
                     ⚠️ ${ticket.releaseVersion ? `Version: ${ticket.releaseVersion}` : 'No Fix Version'}
@@ -982,8 +992,45 @@ export class HtmlGenerator {
                     ` : '<p class="no-content">No significant risks identified.</p>'}
                 </div>
             </div>
+            
+            ${ticket.pullRequests && ticket.pullRequests.length > 0 && ticket.pullRequests.some(pr => pr.description || (pr.reviewers && pr.reviewers.length > 0)) ? `
+            <div style="margin-top: 1em; padding-top: 1em; border-top: 1px solid #eee;">
+                ${ticket.pullRequests.map(pr => `
+                    ${pr.description ? `
+                    <div style="margin-bottom: 1em;">
+                        <h4 style="font-size: 10pt; margin-bottom: 0.5em;">PR #${pr.id} Description</h4>
+                        <div style="font-size: 9pt; color: #555; white-space: pre-wrap;">${this.escapeHtml(pr.description).substring(0, 500)}${pr.description.length > 500 ? '...' : ''}</div>
+                    </div>
+                    ` : ''}
+                    
+                    ${pr.reviewers && pr.reviewers.length > 0 ? `
+                    <div style="margin-bottom: 1em;">
+                        <h4 style="font-size: 10pt; margin-bottom: 0.5em;">Reviewers</h4>
+                        <div style="font-size: 9pt;">
+                            ${pr.reviewers.map(reviewer => `
+                                <span style="margin-right: 1em;">
+                                    ${reviewer.approved ? '✅' : '⏳'} ${reviewer.name}
+                                </span>
+                            `).join('')}
+                        </div>
+                    </div>
+                    ` : ''}
+                `).join('')}
+            </div>
+            ` : ''}
         </div>
     `;
+  }
+
+  private static escapeHtml(text: string): string {
+    const map: Record<string, string> = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#039;'
+    };
+    return text.replace(/[&<>"']/g, m => map[m]);
   }
 
   private static filterGenericNotes(notes: string[]): string[] {
