@@ -20,7 +20,7 @@ def456
 ghi789
 `.trim();
 
-      mockExecSync.mockReturnValue(Buffer.from(mockGitOutput));
+      mockExecSync.mockReturnValue(mockGitOutput as any);
 
       const commits = getTicketCommits(testRepoPath, 'APP-1234');
 
@@ -48,13 +48,13 @@ ghi789
   describe('getTicketBranches', () => {
     it('should find branches containing ticket ID', () => {
       mockExecSync
-        .mockReturnValueOnce(Buffer.from(`
+        .mockReturnValueOnce(`
 origin/master
 origin/feature/APP-1234-fix-login
 origin/feature/APP-5678-other-feature
 origin/test
-`.trim()))
-        .mockReturnValueOnce(Buffer.from('abc123\ndef456')); // Mock commits
+`.trim() as any)
+        .mockReturnValueOnce('abc123\ndef456' as any); // Mock commits
 
       const branches = getTicketBranches(testRepoPath, 'APP-1234');
 
@@ -66,18 +66,18 @@ origin/test
     it('should find branches containing commits for the ticket', () => {
       // First call returns branches without ticket ID in name
       mockExecSync
-        .mockReturnValueOnce(Buffer.from(`
+        .mockReturnValueOnce(`
 origin/master
 origin/feature/login-fix
 origin/test
-`.trim()))
+`.trim() as any)
         // Second call returns commits for the ticket
-        .mockReturnValueOnce(Buffer.from('abc123'))
+        .mockReturnValueOnce('abc123' as any)
         // Third call returns branches containing the commit
-        .mockReturnValueOnce(Buffer.from(`
+        .mockReturnValueOnce(`
 origin/feature/login-fix
 origin/test
-`.trim()));
+`.trim() as any);
 
       const branches = getTicketBranches(testRepoPath, 'APP-1234');
 
@@ -91,14 +91,14 @@ origin/test
     it('should generate comprehensive diff for ticket', async () => {
       // Mock git commands for diff generation
       mockExecSync
-        .mockReturnValueOnce(Buffer.from('abc123\ndef456')) // Commits
-        .mockReturnValueOnce(Buffer.from('Patch content 1')) // First patch
-        .mockReturnValueOnce(Buffer.from('Patch content 2')) // Second patch
-        .mockReturnValueOnce(Buffer.from(` src/login.ts | 20 +++++++++-----------`)) // Stats for commit 1
-        .mockReturnValueOnce(Buffer.from(' 1 file changed, 10 insertions(+), 10 deletions(-)')) // Summary 1
-        .mockReturnValueOnce(Buffer.from(` src/validation.ts | 5 +++--`)) // Stats for commit 2
-        .mockReturnValueOnce(Buffer.from(' 1 file changed, 3 insertions(+), 2 deletions(-)')) // Summary 2
-        .mockReturnValueOnce(Buffer.from('+function validateLogin() {\n-function checkLogin() {')); // Diff sample
+        .mockReturnValueOnce('abc123\ndef456' as any) // Commits
+        .mockReturnValueOnce('Patch content 1' as any) // First patch
+        .mockReturnValueOnce('Patch content 2' as any) // Second patch
+        .mockReturnValueOnce(` src/login.ts | 20 +++++++++-----------` as any) // Stats for commit 1
+        .mockReturnValueOnce(' 1 file changed, 10 insertions(+), 10 deletions(-)' as any) // Summary 1
+        .mockReturnValueOnce(` src/validation.ts | 5 +++--` as any) // Stats for commit 2
+        .mockReturnValueOnce(' 1 file changed, 3 insertions(+), 2 deletions(-)' as any) // Summary 2
+        .mockReturnValueOnce('+function validateLogin() {\n-function checkLogin() {' as any); // Diff sample
 
       const diff = await getTicketCodeDiff(testRepoPath, 'APP-1234');
 

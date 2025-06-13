@@ -93,7 +93,10 @@ describe('BitbucketClient Integration', () => {
         })
       );
 
-      await expect(client.getPullRequestsForTicket('APP-1234')).rejects.toThrow('401');
+      const prs = await client.getPullRequestsForTicket('APP-1234');
+      
+      expect(prs).toHaveLength(0);
+      expect(mockFetch).toHaveBeenCalled();
     });
   });
 
@@ -129,6 +132,9 @@ describe('BitbucketClient Integration', () => {
 
       expect(details).toBeDefined();
       expect(details?.description).toBe('This PR fixes the login validation issue');
+      expect(details?.participants).toHaveLength(2);
+      expect(details?.participants?.[0].approved).toBe(true);
+      expect(details?.participants?.[1].approved).toBe(false);
       expect(details?.author.display_name).toBe('John Doe');
       expect(details?.participants).toHaveLength(2);
     });

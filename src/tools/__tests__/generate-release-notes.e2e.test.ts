@@ -1,7 +1,6 @@
 import { execSync } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
-import { FileSystem } from '../../utils/fs-utils';
 
 describe('Release Notes Generator E2E Tests', () => {
   const testWorkDir = path.join(__dirname, '.test-work');
