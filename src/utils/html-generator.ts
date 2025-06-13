@@ -33,6 +33,7 @@ export interface ReleaseNotesData {
   primaryFocus?: string;
   jiraBaseUrl?: string;
   repoUrl?: string;
+  includePrDescriptions?: boolean;
 }
 
 export interface TicketInfo {
@@ -135,8 +136,8 @@ export class HtmlGenerator {
         /* Typography */
         h1, h2, h3, h4 {
             font-weight: 600;
-            margin-top: 1em;
-            margin-bottom: 0.5em;
+            margin-top: 0.5em;
+            margin-bottom: 0.3em;
             color: #1a1a1a;
             page-break-after: avoid;
         }
@@ -152,7 +153,7 @@ export class HtmlGenerator {
             font-size: 18pt;
             border-bottom: 2px solid #2c3e50;
             padding-bottom: 0.3em;
-            margin-top: 1.5em;
+            margin-top: 0.8em;
         }
         
         h3 {
@@ -323,20 +324,20 @@ export class HtmlGenerator {
         }
         
         .ticket {
-            margin: 2em 0;
+            margin: 1em 0;
             page-break-inside: avoid;
             break-inside: avoid;
             border: 1px solid #ddd;
-            padding: 1.5em;
+            padding: 1em;
         }
         
         .ticket-header {
             display: flex;
             justify-content: space-between;
             align-items: baseline;
-            margin-bottom: 1em;
+            margin-bottom: 0.5em;
             border-bottom: 1px solid #eee;
-            padding-bottom: 0.5em;
+            padding-bottom: 0.3em;
         }
         
         .ticket-id {
@@ -385,16 +386,16 @@ export class HtmlGenerator {
         }
         
         .ticket-summary {
-            margin: 1em 0;
+            margin: 0.75em 0;
             font-size: 11pt;
-            line-height: 1.6;
+            line-height: 1.5;
         }
         
         .ticket-details-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 1em;
-            margin-top: 1em;
+            margin-top: 0.5em;
             page-break-inside: avoid;
             break-inside: avoid;
         }
@@ -408,17 +409,20 @@ export class HtmlGenerator {
             text-transform: uppercase;
             letter-spacing: 0.5px;
             color: #7f8c8d;
-            margin-bottom: 0.5em;
+            margin-bottom: 0.25em;
+            margin-top: 0;
             font-weight: 600;
         }
         
         .detail-section ul {
             margin-left: 1.5em;
-            line-height: 1.5;
+            line-height: 1.4;
+            margin-top: 0;
+            margin-bottom: 0;
         }
         
         .detail-section li {
-            margin: 0.25em 0;
+            margin: 0.15em 0;
         }
         
         /* Compact lists */
@@ -993,10 +997,10 @@ export class HtmlGenerator {
                 </div>
             </div>
             
-            ${ticket.pullRequests && ticket.pullRequests.length > 0 && ticket.pullRequests.some(pr => pr.description || (pr.reviewers && pr.reviewers.length > 0)) ? `
-            <div style="margin-top: 1em; padding-top: 1em; border-top: 1px solid #eee;">
+            ${ticket.pullRequests && ticket.pullRequests.length > 0 && ticket.pullRequests.some(pr => (data.includePrDescriptions && pr.description) || (pr.reviewers && pr.reviewers.length > 0)) ? `
+            <div style="margin-top: 0.5em; padding-top: 0.5em; border-top: 1px solid #eee;">
                 ${ticket.pullRequests.map(pr => `
-                    ${pr.description ? `
+                    ${data.includePrDescriptions && pr.description ? `
                     <div style="margin-bottom: 1em;">
                         <h4 style="font-size: 10pt; margin-bottom: 0.5em;">PR #${pr.id} Description</h4>
                         <div style="font-size: 9pt; color: #555; white-space: pre-wrap;">${this.escapeHtml(pr.description).substring(0, 500)}${pr.description.length > 500 ? '...' : ''}</div>
@@ -1004,8 +1008,8 @@ export class HtmlGenerator {
                     ` : ''}
                     
                     ${pr.reviewers && pr.reviewers.length > 0 ? `
-                    <div style="margin-bottom: 1em;">
-                        <h4 style="font-size: 10pt; margin-bottom: 0.5em;">Reviewers</h4>
+                    <div style="margin-bottom: 0.5em;">
+                        <h4 style="font-size: 10pt; margin-bottom: 0.25em;">Reviewers</h4>
                         <div style="font-size: 9pt;">
                             ${pr.reviewers.map(reviewer => `
                                 <span style="margin-right: 1em;">

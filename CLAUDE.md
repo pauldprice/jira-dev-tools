@@ -168,6 +168,9 @@ Note: Environment variables always take precedence over config files.
 # Generate for specific Fix Version (searches all branches)
 ./toolbox release-notes --repo /Users/paul/code/gather/webapp --fix-version V17.02.00 --ai-model sonnet --pdf
 
+# Include pull request descriptions in the output
+./toolbox release-notes --repo /Users/paul/code/gather/webapp --include-pr-descriptions
+
 # Manage cache
 ./toolbox cache stats
 ./toolbox cache clear
@@ -256,7 +259,10 @@ The release notes generator automatically detects and links to Bitbucket pull re
 
 ### Display
 Pull requests appear in the ticket metadata section:
-- 🔗 PR #123 (MERGED) - with direct link to Bitbucket
+- 🔗 PR #123 (MERGED) by John Smith - 2/3 approved
+- Shows PR author and approval status (approved/total reviewers)
+- Reviewer details shown below each ticket (✅ approved, ⏳ pending)
+- PR descriptions can be included with --include-pr-descriptions flag (off by default)
 
 ## PDF Analysis
 

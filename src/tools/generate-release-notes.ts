@@ -24,6 +24,7 @@ interface ReleaseNotesConfig {
   releaseVersion?: string;
   fixVersion?: string;
   mode?: 'branch' | 'version';
+  includePrDescriptions?: boolean;
 }
 
 const program = new Command();
@@ -52,6 +53,7 @@ program
   .option('--pdf-only', 'generate only PDF output (implies --pdf)')
   .option('--debug <tickets>', 'debug mode: process only specified number of tickets', parseInt)
   .option('--no-cache', 'disable caching for API and AI calls')
+  .option('--include-pr-descriptions', 'include pull request descriptions in the release notes')
   .action(async (options) => {
     try {
       logger.header('Release Notes Generator v2.0');
@@ -93,6 +95,7 @@ program
         releaseVersion: options.version || options.fixVersion,
         fixVersion: options.fixVersion,
         mode,
+        includePrDescriptions: options.includePrDescriptions || false,
       };
 
       logger.info(`Repository: ${config.repoPath}`);
@@ -952,7 +955,7 @@ async function stepGenerateNotes(config: ReleaseNotesConfig): Promise<void> {
                   title: pr.title,
                   state: pr.state,
                   url: pr.links.html.href,
-                  description: details.description,
+                  description: config.includePrDescriptions ? details.description : undefined,
                   author: details.author.display_name,
                   reviewers: reviewers.map(r => ({
                     name: r.user.display_name,
@@ -1102,7 +1105,8 @@ async function stepGenerateNotes(config: ReleaseNotesConfig): Promise<void> {
     commits: allCommits,
     primaryFocus,
     jiraBaseUrl: appConfig.get('JIRA_BASE_URL'),
-    repoUrl
+    repoUrl,
+    includePrDescriptions: config.includePrDescriptions
   };
 
   // Generate HTML optimized for PDF output
