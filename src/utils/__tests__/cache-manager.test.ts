@@ -158,6 +158,7 @@ describe('CacheManager', () => {
       mockFileSystem.exists.mockReturnValue(true);
       mockFileSystem.readdir.mockResolvedValue(['file1.json', 'file2.json']);
       mockFileSystem.stat.mockResolvedValue({ size: 1024 } as any);
+      mockFileSystem.readJSON.mockRejectedValue(new Error('Invalid JSON'));
       
       const stats = await cacheManager.getStats();
       

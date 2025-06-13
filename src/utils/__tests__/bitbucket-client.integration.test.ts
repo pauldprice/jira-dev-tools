@@ -1,20 +1,21 @@
 import { BitbucketClient } from '../bitbucket-client';
-import { CachedFetch } from '../cached-fetch';
+import { cachedFetch } from '../cached-fetch';
 
 // Mock the cached fetch
-jest.mock('../cached-fetch');
+jest.mock('../cached-fetch', () => ({
+  cachedFetch: {
+    fetch: jest.fn()
+  }
+}));
 
 describe('BitbucketClient Integration', () => {
   let client: BitbucketClient;
-  let mockFetch: jest.MockedFunction<CachedFetch['fetch']>;
+  let mockFetch: jest.MockedFunction<typeof cachedFetch.fetch>;
 
   beforeEach(() => {
-    // Setup mock for CachedFetch
-    const mockCachedFetch = {
-      fetch: jest.fn(),
-    };
-    (CachedFetch as jest.MockedClass<typeof CachedFetch>).mockImplementation(() => mockCachedFetch as any);
-    mockFetch = mockCachedFetch.fetch as jest.MockedFunction<CachedFetch['fetch']>;
+    // Get the mocked fetch function
+    mockFetch = (cachedFetch.fetch as jest.MockedFunction<typeof cachedFetch.fetch>);
+    mockFetch.mockClear();
 
     client = new BitbucketClient({
       workspace: 'test-workspace',
