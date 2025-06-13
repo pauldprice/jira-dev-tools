@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
-import { logger, progress, FileSystem, config as appConfig, HtmlGenerator, ReactHtmlGenerator, getTicketCodeDiff, getTicketBranchStatus, ParallelProcessor, PDFGenerator, fetchJiraTicketCached, createCachedClaudeClient, searchJiraTickets, BitbucketClient } from '../utils';
+import { logger, progress, FileSystem, config as appConfig, ReactHtmlGenerator, getTicketCodeDiff, getTicketBranchStatus, ParallelProcessor, PDFGenerator, fetchJiraTicketCached, createCachedClaudeClient, searchJiraTickets, BitbucketClient } from '../utils';
 import type { ReleaseNotesData, TicketInfo, CommitInfo, JiraCredentials } from '../utils';
 import simpleGit, { SimpleGit } from 'simple-git';
 import * as path from 'path';
@@ -25,7 +25,6 @@ interface ReleaseNotesConfig {
   fixVersion?: string;
   mode?: 'branch' | 'version';
   includePrDescriptions?: boolean;
-  useReact?: boolean;
 }
 
 const program = new Command();
@@ -55,7 +54,6 @@ program
   .option('--debug <tickets>', 'debug mode: process only specified number of tickets', parseInt)
   .option('--no-cache', 'disable caching for API and AI calls')
   .option('--include-pr-descriptions', 'include pull request descriptions in the release notes')
-  .option('--use-react', 'use React-based HTML generator (experimental)')
   .action(async (options) => {
     try {
       logger.header('Release Notes Generator v2.0');
@@ -98,7 +96,6 @@ program
         fixVersion: options.fixVersion,
         mode,
         includePrDescriptions: options.includePrDescriptions || false,
-        useReact: options.useReact || false,
       };
 
       logger.info(`Repository: ${config.repoPath}`);
@@ -1113,9 +1110,7 @@ async function stepGenerateNotes(config: ReleaseNotesConfig): Promise<void> {
   };
 
   // Generate HTML optimized for PDF output
-  const html = config.useReact 
-    ? ReactHtmlGenerator.generateReleaseNotes(releaseData)
-    : HtmlGenerator.generateReleaseNotes(releaseData);
+  const html = ReactHtmlGenerator.generateReleaseNotes(releaseData);
   
   // Write output file
   await FileSystem.writeFile(config.outputFile, html);

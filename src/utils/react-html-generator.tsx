@@ -1,6 +1,82 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import type { ReleaseNotesData, TicketInfo } from './html-generator';
+// Export types that were previously in html-generator.ts
+export interface ReleaseNotesData {
+  title: string;
+  date: string;
+  version?: string;
+  branch: {
+    source: string;
+    target: string;
+  };
+  stats: {
+    totalCommits: number;
+    totalTickets: number;
+    bugFixes: number;
+    newFeatures: number;
+    uiUpdates: number;
+    apiChanges: number;
+    refactoring: number;
+    other: number;
+  };
+  categories: {
+    bugFixes: TicketInfo[];
+    newFeatures: TicketInfo[];
+    uiUpdates: TicketInfo[];
+    apiChanges: TicketInfo[];
+    refactoring: TicketInfo[];
+    other: TicketInfo[];
+  };
+  testingGuidelines: string[];
+  commits: CommitInfo[];
+  primaryFocus?: string;
+  jiraBaseUrl?: string;
+  repoUrl?: string;
+  includePrDescriptions?: boolean;
+}
+
+export interface TicketInfo {
+  id: string;
+  title: string;
+  status?: string;
+  assignee?: string;
+  description?: string;
+  commits: CommitInfo[];
+  testingNotes?: string[];
+  risks?: string[];
+  diffStats?: {
+    additions: number;
+    deletions: number;
+  };
+  releaseVersion?: string;
+  branchStatus?: {
+    hasRemoteBranch: boolean;
+    branchNames: string[];
+  };
+  pullRequests?: {
+    id: number;
+    title: string;
+    state: string;
+    url: string;
+    description?: string;
+    author?: string;
+    reviewers?: Array<{
+      name: string;
+      approved: boolean;
+    }>;
+    approvalStatus?: {
+      approved: number;
+      total: number;
+    };
+  }[];
+}
+
+export interface CommitInfo {
+  hash: string;
+  author: string;
+  message: string;
+  date?: string;
+}
 
 // Components
 interface LayoutProps {
