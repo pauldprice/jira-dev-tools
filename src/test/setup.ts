@@ -1,10 +1,27 @@
 // Jest setup file
 import '@testing-library/jest-dom';
+import { logger } from '../utils/enhanced-logger';
+import { loggerMatchers } from './logger-test-utils';
+
+// Extend Jest with logger matchers
+expect.extend(loggerMatchers);
 
 // Mock environment variables for tests
 process.env.NODE_ENV = 'test';
 
-// Suppress console output during tests unless explicitly needed
+// Configure logger for tests
+beforeAll(() => {
+  // Set logger to silent mode by default in tests
+  logger.setSilent(true);
+  logger.setLevel('debug'); // Capture all levels in history
+});
+
+// Clear logger history between tests
+beforeEach(() => {
+  logger.clearHistory();
+});
+
+// Suppress direct console usage (for legacy code)
 const originalConsole = { ...console };
 
 beforeAll(() => {
