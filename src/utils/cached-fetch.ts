@@ -1,7 +1,7 @@
 import { CacheManager, CacheOptions } from './cache-manager';
 
-export interface CachedFetchOptions extends RequestInit {
-  cache?: {
+export interface CachedFetchOptions extends Omit<RequestInit, 'cache'> {
+  cacheOptions?: {
     ttl?: number; // Time to live in milliseconds
     key?: string; // Custom cache key
     namespace?: string; // Cache namespace
@@ -25,7 +25,7 @@ export class CachedFetch {
    * Fetch with caching support
    */
   async fetch(url: string, options: CachedFetchOptions = {}): Promise<Response> {
-    const { cache: cacheOptions = {}, ...fetchOptions } = options;
+    const { cacheOptions = {}, ...fetchOptions } = options;
     
     // Generate cache key
     const cacheKey = cacheOptions.key || this.generateCacheKey(url, fetchOptions, cacheOptions);
@@ -60,7 +60,7 @@ export class CachedFetch {
   private generateCacheKey(
     url: string, 
     options: RequestInit, 
-    cacheOptions: CachedFetchOptions['cache'] = {}
+    cacheOptions: CachedFetchOptions['cacheOptions'] = {}
   ): string {
     const keyParts: any[] = [url];
 

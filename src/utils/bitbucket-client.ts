@@ -122,7 +122,7 @@ export class BitbucketClient {
           'Authorization': `Bearer ${this.apiToken}`,
           'Accept': 'application/json'
         },
-        cache: {
+        cacheOptions: {
           namespace: 'bitbucket',
           ttl: 5 * 60 * 1000 // Cache for 5 minutes
         }
@@ -184,7 +184,7 @@ export class BitbucketClient {
           'Authorization': `Bearer ${this.apiToken}`,
           'Accept': 'application/json'
         },
-        cache: {
+        cacheOptions: {
           namespace: 'bitbucket',
           ttl: 5 * 60 * 1000 // Cache for 5 minutes
         }
@@ -218,7 +218,7 @@ export class BitbucketClient {
           'Authorization': `Bearer ${this.apiToken}`,
           'Accept': 'application/json'
         },
-        cache: {
+        cacheOptions: {
           namespace: 'bitbucket',
           ttl: 5 * 60 * 1000 // Cache for 5 minutes
         }
