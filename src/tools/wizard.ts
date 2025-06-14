@@ -19,7 +19,11 @@ program
     const port = parseInt(options.port, 10);
 
     // Serve static files from the wizard public directory
-    const publicPath = path.join(__dirname, '../../wizard/public');
+    // Get the project root directory (where package.json is)
+    const projectRoot = path.resolve(__dirname, '../..');
+    const publicPath = path.join(projectRoot, 'wizard/public');
+    
+    logger.debug(`Serving static files from: ${publicPath}`);
     app.use(express.static(publicPath));
 
     // API endpoint to get available commands
@@ -165,8 +169,13 @@ program
       });
     });
 
-    // Serve the React app for all other routes
-    app.get('*', (_, res) => {
+    // Serve the React app for the root route
+    app.get('/', (_, res) => {
+      res.sendFile(path.join(publicPath, 'index.html'));
+    });
+    
+    // Handle any other routes by serving the React app
+    app.use((_, res) => {
       res.sendFile(path.join(publicPath, 'index.html'));
     });
 
