@@ -19,8 +19,8 @@ export interface LoggerConfig {
 
 export class EnhancedLogger {
   private static instance: EnhancedLogger;
-  private config: LoggerConfig;
-  private logHistory: LogEntry[] = [];
+  protected config: LoggerConfig;
+  protected logHistory: LogEntry[] = [];
   private readonly logLevels: Record<LogLevel, number> = {
     debug: 0,
     info: 1,
@@ -45,7 +45,7 @@ export class EnhancedLogger {
     return EnhancedLogger.instance;
   }
 
-  private shouldUseColor(): boolean {
+  protected shouldUseColor(): boolean {
     if (
       !process.stdout.isTTY ||
       process.env.NO_COLOR ||
@@ -230,10 +230,21 @@ export class EnhancedLogger {
   }
 }
 
-// Export singleton instance
-export const logger = EnhancedLogger.getInstance();
+// Export singleton instance as a getter to always get the current instance
+export const getLogger = () => EnhancedLogger.getInstance();
+
+// For backward compatibility and ease of use, create a proxy that delegates to getInstance
+export const logger = new Proxy({} as EnhancedLogger, {
+  get(_, prop) {
+    const instance = EnhancedLogger.getInstance();
+    return (instance as any)[prop];
+  }
+});
 
 // Export for testing
 export const resetLogger = () => {
+  // Clear the singleton instance to force recreation
   (EnhancedLogger as any).instance = undefined;
+  // This will cause the next getInstance() call to create a new instance
+  // that reads the current environment variables
 };

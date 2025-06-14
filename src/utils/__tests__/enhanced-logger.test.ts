@@ -19,13 +19,21 @@ describe('EnhancedLogger', () => {
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
     consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
     
-    // Set logger to not be silent for tests
+    // Reset logger to default state for each test
     logger.setSilent(false);
+    logger.setLevel('info'); // Reset to default level
+    logger.clearHistory();
+    logger.removeAllListeners();
   });
 
   afterEach(() => {
     loggerTest.stopCapture();
     jest.restoreAllMocks();
+    // Reset environment variables that tests might have changed
+    delete process.env.LOG_TIMESTAMPS;
+    delete process.env.NO_COLOR;
+    // Reset logger to clean state
+    resetLogger();
   });
 
   describe('Logging Methods', () => {
@@ -110,6 +118,10 @@ describe('EnhancedLogger', () => {
 
   describe('Silent Mode', () => {
     it('should not output to console when silent', () => {
+      // Clear any previous calls
+      consoleLogSpy.mockClear();
+      consoleErrorSpy.mockClear();
+      
       logger.setSilent(true);
       loggerTest.startCapture();
       
@@ -184,18 +196,22 @@ describe('EnhancedLogger', () => {
 
   describe('Formatting', () => {
     it('should include timestamps when enabled', () => {
-      // Set timestamp env before creating logger
+      // Clear console spy
+      consoleLogSpy.mockClear();
+      
+      // Set timestamp env and reset logger
       const originalTimestamp = process.env.LOG_TIMESTAMPS;
       process.env.LOG_TIMESTAMPS = 'true';
       
-      // Need to get a fresh logger instance
+      // Force re-evaluation of timestamp setting
       resetLogger();
-      const { logger: timestampLogger } = require('../enhanced-logger');
       
-      timestampLogger.setSilent(false);
-      timestampLogger.info('Timestamped message');
+      // The singleton logger should now use timestamps
+      logger.info('Timestamped message');
       
-      expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringMatching(/\[\d{4}-\d{2}-\d{2}T/));
+      const calls = consoleLogSpy.mock.calls;
+      expect(calls.length).toBeGreaterThan(0);
+      expect(calls[calls.length - 1][0]).toMatch(/\[\d{4}-\d{2}-\d{2}T/);
       
       // Restore
       process.env.LOG_TIMESTAMPS = originalTimestamp;
