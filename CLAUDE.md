@@ -147,4 +147,6 @@ Note: Environment variables always take precedence over config files.
 4. **Action-Oriented**: Focus on completing tasks, not explaining
 5. **Tool Usage**: Prefer internal module imports over shell execution
 
-[... rest of the file remains unchanged ...]
+## Project Memories
+
+- remember to update the wizard whenever the command line interface is updated.

@@ -178,7 +178,17 @@ program
       if (config.generatePDF && config.pdfFile) {
         try {
           progress.start('Generating PDF...');
-          await PDFGenerator.generateFromHTML(config.outputFile, config.pdfFile);
+          
+          // Add timeout for PDF generation
+          const pdfTimeout = new Promise<never>((_, reject) => {
+            setTimeout(() => reject(new Error('PDF generation timed out after 2 minutes')), 120000);
+          });
+          
+          await Promise.race([
+            PDFGenerator.generateFromHTML(config.outputFile, config.pdfFile),
+            pdfTimeout
+          ]);
+          
           progress.succeed(`PDF generated: ${config.pdfFile}`);
           
           // Always remove HTML file after successful PDF generation
@@ -192,6 +202,16 @@ program
         } catch (error: any) {
           progress.fail();
           logger.error(`Failed to generate PDF: ${error.message}`);
+          
+          if (error.message.includes('timed out')) {
+            logger.info('PDF generation is taking too long. This might be due to:');
+            logger.info('  - Large HTML file size');
+            logger.info('  - Complex CSS/JavaScript in the document');
+            logger.info('  - Chromium/Puppeteer installation issues');
+            logger.info('');
+            logger.info('Try running: npm rebuild puppeteer');
+          }
+          
           logger.info(`HTML file retained at: ${config.outputFile}`);
           // Don't fail the whole process if PDF generation fails
         }

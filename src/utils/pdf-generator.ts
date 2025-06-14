@@ -23,20 +23,36 @@ export class PDFGenerator {
     pdfPath?: string,
     options?: PDFOptions
   ): Promise<string> {
+    logger.info('Launching Puppeteer browser...');
+    
     const browser = await puppeteer.launch({
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process'
+      ],
+      timeout: 30000 // 30 second timeout for browser launch
     });
 
     try {
       const page = await browser.newPage();
       
       // Read HTML content
+      logger.info('Loading HTML content...');
       const htmlContent = fs.readFileSync(htmlPath, 'utf-8');
+      
+      // Set longer timeout for page operations
+      page.setDefaultTimeout(60000); // 60 seconds
       
       // Load HTML with file:// protocol to ensure CSS and assets load correctly
       await page.setContent(htmlContent, {
-        waitUntil: 'networkidle0'
+        waitUntil: 'networkidle0',
+        timeout: 30000 // 30 second timeout for content loading
       });
       
       // Set viewport for better rendering
@@ -66,6 +82,7 @@ export class PDFGenerator {
       };
       
       // Generate PDF
+      logger.info('Generating PDF...');
       await page.pdf(pdfOptions);
       
       logger.success(`PDF generated: ${pdfPath}`);
@@ -73,9 +90,17 @@ export class PDFGenerator {
       return pdfPath;
     } catch (error: any) {
       logger.error(`Failed to generate PDF: ${error.message}`);
+      if (error.message.includes('Protocol error')) {
+        logger.info('This might be due to Chromium not being properly installed.');
+        logger.info('Try running: npm rebuild puppeteer');
+      }
       throw error;
     } finally {
-      await browser.close();
+      try {
+        await browser.close();
+      } catch (closeError) {
+        logger.warn('Failed to close browser gracefully');
+      }
     }
   }
 }
