@@ -6,17 +6,57 @@ import * as path from 'path';
 import open from 'open';
 import { logger } from '../utils/enhanced-logger';
 import { createServer } from 'http';
+import * as net from 'net';
 
 const program = new Command();
+
+// Helper function to check if a port is available
+const isPortAvailable = (port: number): Promise<boolean> => {
+  return new Promise((resolve) => {
+    const tester = net.createServer()
+      .once('error', () => resolve(false))
+      .once('listening', () => {
+        tester.once('close', () => resolve(true)).close();
+      })
+      .listen(port);
+  });
+};
+
+// Helper function to find an available port
+const findAvailablePort = async (startPort: number, maxAttempts: number = 10): Promise<number> => {
+  for (let i = 0; i < maxAttempts; i++) {
+    const port = startPort + i;
+    if (await isPortAvailable(port)) {
+      return port;
+    }
+  }
+  throw new Error(`No available ports found between ${startPort} and ${startPort + maxAttempts - 1}`);
+};
 
 program
   .name('wizard')
   .description('Launch an interactive web-based wizard to help build toolbox commands')
   .option('-p, --port <port>', 'Port to run the wizard on', '3456')
   .option('--no-open', 'Do not automatically open browser')
+  .option('--auto-port', 'Automatically find an available port if the specified one is in use')
   .action(async (options) => {
     const app = express();
-    const port = parseInt(options.port, 10);
+    let port = parseInt(options.port, 10);
+    
+    // Check if we should auto-find a port
+    if (options.autoPort) {
+      const available = await isPortAvailable(port);
+      if (!available) {
+        logger.warn(`Port ${port} is in use, finding an available port...`);
+        try {
+          port = await findAvailablePort(port);
+          logger.info(`Using port ${port}`);
+        } catch (error) {
+          logger.error('Could not find an available port');
+          process.exit(1);
+        }
+      }
+    }
 
     // Serve static files from the wizard public directory
     // Get the project root directory (where package.json is)
@@ -180,6 +220,24 @@ program
     });
 
     const server = createServer(app);
+
+    server.on('error', (error: any) => {
+      if (error.code === 'EADDRINUSE') {
+        logger.error(`Port ${port} is already in use.`);
+        logger.info(`Try one of these options:`);
+        logger.info(`  1. Use a different port: ./toolbox wizard --port 3457`);
+        logger.info(`  2. Find and stop the process using port ${port}:`);
+        logger.info(`     lsof -ti:${port} | xargs kill -9`);
+        process.exit(1);
+      } else if (error.code === 'EACCES') {
+        logger.error(`Permission denied to use port ${port}.`);
+        logger.info(`Try using a port number above 1024.`);
+        process.exit(1);
+      } else {
+        logger.error(`Server error: ${error.message}`);
+        process.exit(1);
+      }
+    });
 
     server.listen(port, () => {
       logger.success(`Toolbox Wizard running at http://localhost:${port}`);
