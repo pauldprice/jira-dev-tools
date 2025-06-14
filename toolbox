@@ -37,6 +37,7 @@ usage() {
     echo -e "    ${CYAN}release-notes${NC}   Generate HTML release notes from git commits"
     echo -e "    ${CYAN}analyze-pdf${NC}     Analyze PDF files using Claude's visual AI"
     echo -e "    ${CYAN}cache${NC}           Manage toolbox cache"
+    echo -e "    ${CYAN}wizard${NC}          Launch interactive web-based command builder"
     echo -e "    ${CYAN}help${NC}            Show this help message"
     echo ""
     echo -e "${BOLD}EXAMPLES:${NC}"
@@ -67,6 +68,9 @@ case "$COMMAND" in
         ;;
     cache)
         cd "$SCRIPT_DIR" && npx ts-node src/tools/cache-manager.ts "$@"
+        ;;
+    wizard)
+        cd "$SCRIPT_DIR" && npx ts-node src/tools/wizard.ts "$@"
         ;;
     help|--help|-h)
         usage
