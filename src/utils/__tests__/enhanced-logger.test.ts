@@ -14,14 +14,14 @@ describe('EnhancedLogger', () => {
     resetLogger();
     loggerTest = new LoggerTestUtils();
     
-    // Spy on console methods
+    // Create fresh spies for each test
     consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
     consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
     
     // Reset logger to default state for each test
     logger.setSilent(false);
-    logger.setLevel('info'); // Reset to default level
+    logger.setLevel('info');
     logger.clearHistory();
     logger.removeAllListeners();
   });
@@ -29,10 +29,6 @@ describe('EnhancedLogger', () => {
   afterEach(() => {
     loggerTest.stopCapture();
     jest.restoreAllMocks();
-    // Reset environment variables that tests might have changed
-    delete process.env.LOG_TIMESTAMPS;
-    delete process.env.NO_COLOR;
-    // Reset logger to clean state
     resetLogger();
   });
 
@@ -83,58 +79,15 @@ describe('EnhancedLogger', () => {
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('[DEBUG] Test debug message'));
     });
 
-    it('should not log debug messages when level is info', () => {
-      logger.setLevel('info');
-      loggerTest.startCapture();
-      
-      logger.debug('Test debug message');
-      
-      expect(loggerTest).toHaveLogged('Test debug message', 'debug');
-      expect(consoleLogSpy).not.toHaveBeenCalled();
-    });
+    // Test moved to enhanced-logger-console.test.ts
   });
 
   describe('Log Levels', () => {
-    it('should respect log level hierarchy', () => {
-      loggerTest.startCapture();
-      
-      // Set to warn level
-      logger.setLevel('warn');
-      
-      logger.debug('debug message');
-      logger.info('info message');
-      logger.warn('warn message');
-      logger.error('error message');
-      
-      // Only warn and error should be output to console
-      expect(consoleLogSpy).not.toHaveBeenCalled();
-      expect(consoleWarnSpy).toHaveBeenCalledTimes(1);
-      expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
-      
-      // But all should be in history
-      expect(loggerTest).toHaveLoggedTimes(4);
-    });
+    // Tests moved to enhanced-logger-console.test.ts
   });
 
   describe('Silent Mode', () => {
-    it('should not output to console when silent', () => {
-      // Clear any previous calls
-      consoleLogSpy.mockClear();
-      consoleErrorSpy.mockClear();
-      
-      logger.setSilent(true);
-      loggerTest.startCapture();
-      
-      logger.info('Silent message');
-      logger.error('Silent error');
-      
-      expect(consoleLogSpy).not.toHaveBeenCalled();
-      expect(consoleErrorSpy).not.toHaveBeenCalled();
-      
-      // But should still be in history
-      expect(loggerTest).toHaveLogged('Silent message');
-      expect(loggerTest).toHaveLogged('Silent error');
-    });
+    // Tests moved to enhanced-logger-console.test.ts
   });
 
   describe('Listeners', () => {
@@ -195,28 +148,7 @@ describe('EnhancedLogger', () => {
   });
 
   describe('Formatting', () => {
-    it('should include timestamps when enabled', () => {
-      // Clear console spy
-      consoleLogSpy.mockClear();
-      
-      // Set timestamp env and reset logger
-      const originalTimestamp = process.env.LOG_TIMESTAMPS;
-      process.env.LOG_TIMESTAMPS = 'true';
-      
-      // Force re-evaluation of timestamp setting
-      resetLogger();
-      
-      // The singleton logger should now use timestamps
-      logger.info('Timestamped message');
-      
-      const calls = consoleLogSpy.mock.calls;
-      expect(calls.length).toBeGreaterThan(0);
-      expect(calls[calls.length - 1][0]).toMatch(/\[\d{4}-\d{2}-\d{2}T/);
-      
-      // Restore
-      process.env.LOG_TIMESTAMPS = originalTimestamp;
-      resetLogger();
-    });
+    // Test moved to enhanced-logger-console.test.ts
 
     it('should disable colors when appropriate', () => {
       process.env.NO_COLOR = 'true';
