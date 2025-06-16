@@ -224,6 +224,9 @@ program
         await cleanWorkspace(config);
       }
 
+      // Exit successfully
+      process.exit(0);
+
     } catch (error: any) {
       logger.error(`Failed to generate release notes: ${error.message}`);
       if (options.verbose) {
