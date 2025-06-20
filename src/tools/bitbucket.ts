@@ -394,38 +394,57 @@ program
         
         try {
           // Fetch JIRA ticket details
-          const { execSync } = require('child_process');
+          const { spawnSync } = require('child_process');
           const toolboxPath = path.join(__dirname, '../../..');
           
-          // Run the command and capture output
-          const jiraOutput = execSync(`"${toolboxPath}/toolbox" fetch-jira ${ticketId} --format llm 2>&1`, {
+          // Use spawnSync for better error handling
+          const result = spawnSync(toolboxPath + '/toolbox', ['fetch-jira', ticketId, '--format', 'llm'], {
             encoding: 'utf-8',
-            cwd: options.dir || config.getDefaultRepoPath()
+            cwd: options.dir || config.getDefaultRepoPath(),
+            env: { ...process.env }  // Pass through environment variables
           });
           
+          logger.debug(`Command exit code: ${result.status}`);
+          
+          if (result.error) {
+            throw new Error(`Command failed: ${result.error.message}`);
+          }
+          
+          if (result.status !== 0) {
+            // Command failed
+            const errorMsg = result.stderr || result.stdout || 'Unknown error';
+            throw new Error(`Command exited with code ${result.status}: ${errorMsg}`);
+          }
+          
           // Check if we got valid output
+          const jiraOutput = result.stdout;
           if (jiraOutput && jiraOutput.trim() && !jiraOutput.includes('Error:') && !jiraOutput.includes('Failed')) {
             jiraContext = `JIRA Ticket ${ticketId} Summary:\n${jiraOutput}\n`;
             logger.debug(`Successfully fetched JIRA ticket ${ticketId}`);
           } else {
-            logger.debug(`JIRA ticket ${ticketId} fetch returned invalid output`);
+            logger.debug(`JIRA ticket ${ticketId} fetch returned invalid output: ${jiraOutput}`);
           }
         } catch (error: any) {
-          // Check specific error cases
-          const errorOutput = error.stdout || error.stderr || error.message || '';
+          // Parse the error message
+          const errorMsg = error.message || '';
           
-          if (errorOutput.includes('JIRA credentials not found') || errorOutput.includes('No JIRA configuration found')) {
-            logger.debug(`JIRA credentials not configured - skipping ticket ${ticketId}`);
-          } else if (errorOutput.includes('404') || errorOutput.includes('not found')) {
-            logger.debug(`JIRA ticket ${ticketId} not found`);
-          } else if (errorOutput.includes('ENOENT')) {
+          // Always log the actual error
+          logger.error(`JIRA fetch failed: ${errorMsg}`);
+          
+          if (errorMsg.includes('JIRA credentials not found') || errorMsg.includes('No JIRA configuration found')) {
+            logger.warn(`JIRA credentials not configured - cannot fetch ticket ${ticketId}`);
+            logger.info('Configure JIRA credentials by setting JIRA_EMAIL and JIRA_API_TOKEN');
+          } else if (errorMsg.includes('404') || errorMsg.includes('not found')) {
+            logger.warn(`JIRA ticket ${ticketId} not found (404)`);
+          } else if (errorMsg.includes('ENOENT')) {
             logger.error(`Toolbox command not found at expected path`);
+          } else if (errorMsg.includes('401') || errorMsg.includes('Unauthorized')) {
+            logger.error(`JIRA authentication failed - check your JIRA_API_TOKEN`);
+          } else if (errorMsg.includes('403') || errorMsg.includes('Forbidden')) {
+            logger.error(`JIRA access forbidden - check your permissions for ticket ${ticketId}`);
           } else {
-            // Only warn for unexpected errors
-            logger.warn(`Could not fetch JIRA ticket ${ticketId}`);
-            if (process.env.VERBOSE) {
-              logger.debug(`Error details: ${errorOutput}`);
-            }
+            // Log the full error for debugging
+            logger.warn(`Could not fetch JIRA ticket ${ticketId}: ${errorMsg}`);
           }
         }
       }
