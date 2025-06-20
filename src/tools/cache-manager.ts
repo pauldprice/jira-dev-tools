@@ -95,42 +95,104 @@ program
   .option('-y, --yes', 'skip confirmation')
   .action(async (_cmdObj) => {
     const options = program.opts();
-    const cache = new CacheManager({
-      cacheDir: options.dir,
-      namespace: options.namespace
-    });
-
-    const stats = await cache.getStats();
     
-    if (stats.count === 0) {
-      logger.info('Cache is already empty');
-      return;
-    }
+    if (options.namespace) {
+      // Clear specific namespace
+      const cache = new CacheManager({
+        cacheDir: options.dir,
+        namespace: options.namespace
+      });
 
-    if (!_cmdObj.yes) {
-      const namespace = options.namespace ? `'${options.namespace}' namespace` : 'all namespaces';
-      logger.warn(`This will delete ${stats.count} cache entries from ${namespace}`);
-      logger.warn(`Total size: ${formatBytes(stats.size)}`);
+      const stats = await cache.getStats();
       
-      const readline = await import('readline');
-      const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout
-      });
-
-      const answer = await new Promise<string>(resolve => {
-        rl.question('Continue? (y/N) ', resolve);
-      });
-      rl.close();
-
-      if (answer.toLowerCase() !== 'y') {
-        logger.info('Cancelled');
+      if (stats.count === 0) {
+        logger.info(`Cache for '${options.namespace}' namespace is already empty`);
         return;
       }
-    }
 
-    await cache.clear();
-    logger.success('Cache cleared');
+      if (!_cmdObj.yes) {
+        logger.warn(`This will delete ${stats.count} cache entries from '${options.namespace}' namespace`);
+        logger.warn(`Total size: ${formatBytes(stats.size)}`);
+        
+        const readline = await import('readline');
+        const rl = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout
+        });
+
+        const answer = await new Promise<string>(resolve => {
+          rl.question('Continue? (y/N) ', resolve);
+        });
+        rl.close();
+
+        if (answer.toLowerCase() !== 'y') {
+          logger.info('Cancelled');
+          return;
+        }
+      }
+
+      await cache.clear();
+      logger.success(`Cache cleared for '${options.namespace}' namespace`);
+    } else {
+      // Clear all namespaces
+      const namespaces = ['global', 'fetch', 'claude', 'jira', 'bitbucket'];
+      let totalCount = 0;
+      let totalSize = 0;
+      
+      // First, get total stats
+      for (const ns of namespaces) {
+        const nsCache = new CacheManager({
+          cacheDir: options.dir,
+          namespace: ns
+        });
+        const nsStats = await nsCache.getStats();
+        totalCount += nsStats.count;
+        totalSize += nsStats.size;
+      }
+      
+      if (totalCount === 0) {
+        logger.info('Cache is already empty');
+        return;
+      }
+
+      if (!_cmdObj.yes) {
+        logger.warn(`This will delete ${totalCount} cache entries from all namespaces`);
+        logger.warn(`Total size: ${formatBytes(totalSize)}`);
+        
+        const readline = await import('readline');
+        const rl = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout
+        });
+
+        const answer = await new Promise<string>(resolve => {
+          rl.question('Continue? (y/N) ', resolve);
+        });
+        rl.close();
+
+        if (answer.toLowerCase() !== 'y') {
+          logger.info('Cancelled');
+          return;
+        }
+      }
+
+      // Clear each namespace
+      let clearedCount = 0;
+      for (const ns of namespaces) {
+        const nsCache = new CacheManager({
+          cacheDir: options.dir,
+          namespace: ns
+        });
+        const nsStats = await nsCache.getStats();
+        if (nsStats.count > 0) {
+          await nsCache.clear();
+          clearedCount++;
+          logger.info(`Cleared ${ns} namespace (${nsStats.count} entries)`);
+        }
+      }
+      
+      logger.success(`Cache cleared - removed ${totalCount} entries from ${clearedCount} namespaces`);
+    }
   });
 
 program
