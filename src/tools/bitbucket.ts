@@ -395,13 +395,38 @@ program
         try {
           // Fetch JIRA ticket details
           const { execSync } = require('child_process');
-          const jiraOutput = execSync(`${path.join(__dirname, '../../..')}/toolbox fetch-jira ${ticketId} --format llm`, {
+          const toolboxPath = path.join(__dirname, '../../..');
+          
+          // Run the command and capture output
+          const jiraOutput = execSync(`"${toolboxPath}/toolbox" fetch-jira ${ticketId} --format llm 2>&1`, {
             encoding: 'utf-8',
-            stdio: ['pipe', 'pipe', 'pipe']
+            cwd: options.dir || config.getDefaultRepoPath()
           });
-          jiraContext = `JIRA Ticket ${ticketId} Summary:\n${jiraOutput}\n`;
-        } catch (error) {
-          logger.warn(`Could not fetch JIRA ticket ${ticketId}`);
+          
+          // Check if we got valid output
+          if (jiraOutput && jiraOutput.trim() && !jiraOutput.includes('Error:') && !jiraOutput.includes('Failed')) {
+            jiraContext = `JIRA Ticket ${ticketId} Summary:\n${jiraOutput}\n`;
+            logger.debug(`Successfully fetched JIRA ticket ${ticketId}`);
+          } else {
+            logger.debug(`JIRA ticket ${ticketId} fetch returned invalid output`);
+          }
+        } catch (error: any) {
+          // Check specific error cases
+          const errorOutput = error.stdout || error.stderr || error.message || '';
+          
+          if (errorOutput.includes('JIRA credentials not found') || errorOutput.includes('No JIRA configuration found')) {
+            logger.debug(`JIRA credentials not configured - skipping ticket ${ticketId}`);
+          } else if (errorOutput.includes('404') || errorOutput.includes('not found')) {
+            logger.debug(`JIRA ticket ${ticketId} not found`);
+          } else if (errorOutput.includes('ENOENT')) {
+            logger.error(`Toolbox command not found at expected path`);
+          } else {
+            // Only warn for unexpected errors
+            logger.warn(`Could not fetch JIRA ticket ${ticketId}`);
+            if (process.env.VERBOSE) {
+              logger.debug(`Error details: ${errorOutput}`);
+            }
+          }
         }
       }
 
