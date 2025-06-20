@@ -153,29 +153,44 @@ export class CacheManager {
     oldestEntry?: Date;
     newestEntry?: Date;
   }> {
-    const files = await FileSystem.readdir(this.cacheDir);
+    let totalCount = 0;
     let totalSize = 0;
     let oldest: number | undefined;
     let newest: number | undefined;
 
-    for (const file of files) {
-      if (!file.endsWith('.json')) continue;
+    // Read all subdirectories in the cache directory
+    const subdirs = await FileSystem.readdir(this.cacheDir);
+    
+    for (const subdir of subdirs) {
+      const subdirPath = path.join(this.cacheDir, subdir);
+      const stat = await FileSystem.stat(subdirPath);
       
-      const filePath = path.join(this.cacheDir, file);
-      const stat = await FileSystem.stat(filePath);
-      totalSize += stat.size;
+      // Skip if not a directory
+      if (!stat.isDirectory()) continue;
+      
+      // Read all files in the subdirectory
+      const files = await FileSystem.readdir(subdirPath);
+      
+      for (const file of files) {
+        if (!file.endsWith('.json')) continue;
+        
+        const filePath = path.join(subdirPath, file);
+        const fileStat = await FileSystem.stat(filePath);
+        totalSize += fileStat.size;
+        totalCount++;
 
-      try {
-        const entry: CacheEntry = await FileSystem.readJSON(filePath);
-        if (!oldest || entry.timestamp < oldest) oldest = entry.timestamp;
-        if (!newest || entry.timestamp > newest) newest = entry.timestamp;
-      } catch {
-        // Ignore invalid entries
+        try {
+          const entry: CacheEntry = await FileSystem.readJSON(filePath);
+          if (!oldest || entry.timestamp < oldest) oldest = entry.timestamp;
+          if (!newest || entry.timestamp > newest) newest = entry.timestamp;
+        } catch {
+          // Ignore invalid entries
+        }
       }
     }
 
     return {
-      count: files.filter(f => f.endsWith('.json')).length,
+      count: totalCount,
       size: totalSize,
       oldestEntry: oldest ? new Date(oldest) : undefined,
       newestEntry: newest ? new Date(newest) : undefined

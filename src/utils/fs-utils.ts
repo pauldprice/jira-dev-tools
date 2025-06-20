@@ -76,11 +76,12 @@ export class FileSystem {
     return await fs.readdir(dirPath);
   }
 
-  static async stat(filePath: string): Promise<{ size: number; mtime: Date }> {
+  static async stat(filePath: string): Promise<{ size: number; mtime: Date; isDirectory(): boolean }> {
     const stats = await fs.stat(filePath);
     return {
       size: stats.size,
-      mtime: stats.mtime
+      mtime: stats.mtime,
+      isDirectory: () => stats.isDirectory()
     };
   }
 

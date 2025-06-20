@@ -17,28 +17,64 @@ program
   .description('Show cache statistics')
   .action(async (_cmdObj, cmd) => {
     const options = cmd.parent.opts();
-    const cache = new CacheManager({
-      cacheDir: options.dir,
-      namespace: options.namespace
-    });
-
-    const stats = await cache.getStats();
     
     logger.header('Cache Statistics');
-    logger.info(`Total entries: ${stats.count}`);
-    logger.info(`Total size: ${formatBytes(stats.size)}`);
     
-    if (stats.oldestEntry) {
-      logger.info(`Oldest entry: ${stats.oldestEntry.toLocaleString()}`);
-    }
-    if (stats.newestEntry) {
-      logger.info(`Newest entry: ${stats.newestEntry.toLocaleString()}`);
-    }
+    if (options.namespace) {
+      // Show stats for specific namespace
+      const cache = new CacheManager({
+        cacheDir: options.dir,
+        namespace: options.namespace
+      });
+      const stats = await cache.getStats();
+      
+      logger.info(`Namespace: ${options.namespace}`);
+      logger.info(`Total entries: ${stats.count}`);
+      logger.info(`Total size: ${formatBytes(stats.size)}`);
+      
+      if (stats.oldestEntry) {
+        logger.info(`Oldest entry: ${stats.oldestEntry.toLocaleString()}`);
+      }
+      if (stats.newestEntry) {
+        logger.info(`Newest entry: ${stats.newestEntry.toLocaleString()}`);
+      }
+    } else {
+      // Calculate total stats across all namespaces
+      const namespaces = ['global', 'fetch', 'claude', 'jira', 'bitbucket'];
+      let totalCount = 0;
+      let totalSize = 0;
+      let oldestDate: Date | undefined;
+      let newestDate: Date | undefined;
+      
+      for (const ns of namespaces) {
+        const nsCache = new CacheManager({
+          cacheDir: options.dir,
+          namespace: ns
+        });
+        const nsStats = await nsCache.getStats();
+        totalCount += nsStats.count;
+        totalSize += nsStats.size;
+        
+        if (nsStats.oldestEntry && (!oldestDate || nsStats.oldestEntry < oldestDate)) {
+          oldestDate = nsStats.oldestEntry;
+        }
+        if (nsStats.newestEntry && (!newestDate || nsStats.newestEntry > newestDate)) {
+          newestDate = nsStats.newestEntry;
+        }
+      }
+      
+      logger.info(`Total entries: ${totalCount}`);
+      logger.info(`Total size: ${formatBytes(totalSize)}`);
+      
+      if (oldestDate) {
+        logger.info(`Oldest entry: ${oldestDate.toLocaleString()}`);
+      }
+      if (newestDate) {
+        logger.info(`Newest entry: ${newestDate.toLocaleString()}`);
+      }
 
-    // Show namespace-specific stats
-    if (!options.namespace) {
+      // Show namespace-specific stats
       logger.info('\nNamespace breakdown:');
-      const namespaces = ['global', 'fetch', 'claude', 'jira'];
       
       for (const ns of namespaces) {
         const nsCache = new CacheManager({
