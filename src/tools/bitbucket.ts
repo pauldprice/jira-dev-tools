@@ -233,26 +233,40 @@ program
         logger.info(`Searching for pull requests matching JIRA ticket ${ticketId}...`);
         
         const prs = await client.getPullRequestsForTicket(ticketId);
-        const openPrs = prs.filter(pr => pr.state === 'OPEN');
+        
+        // Fetch full details to get participant info
+        const prsWithDetails = await Promise.all(
+          prs.map(async (pr) => {
+            const fullPr = await client.getPullRequestDetails(pr.id);
+            return fullPr || pr;
+          })
+        );
+        
+        const openPrs = prsWithDetails.filter(pr => pr.state === 'OPEN');
         
         if (openPrs.length === 0) {
           logger.error(`No open pull requests found for ticket ${ticketId}`);
-          if (prs.length > 0) {
+          if (prsWithDetails.length > 0) {
             logger.info('Found the following non-open PRs:');
-            prs.forEach(pr => {
-              logger.info(`  PR #${pr.id} (${pr.state}): ${pr.title}`);
+            prsWithDetails.forEach(pr => {
+              const hasApproval = pr.participants?.some(p => p.approved) || false;
+              const approvalStatus = hasApproval ? ' [APPROVED]' : '';
+              logger.info(`  PR #${pr.id} (${pr.state}): ${pr.title}${approvalStatus}`);
             });
           }
           process.exit(1);
         } else if (openPrs.length === 1) {
           pr = openPrs[0];
           prNumber = pr.id;
-          logger.info(`Found PR #${prNumber}: ${pr.title}`);
+          const hasApproval = pr.participants?.some(p => p.approved) || false;
+          logger.info(`Found PR #${prNumber}: ${pr.title}${hasApproval ? ' [Already approved]' : ''}`);
         } else {
           // Multiple open PRs, show them and ask user to be more specific
           logger.error(`Multiple open pull requests found for ticket ${ticketId}:`);
           openPrs.forEach(pr => {
-            logger.info(`  PR #${pr.id}: ${pr.title} (by ${pr.author.display_name})`);
+            const hasApproval = pr.participants?.some(p => p.approved) || false;
+            const approvalStatus = hasApproval ? ' [APPROVED]' : ' [Needs review]';
+            logger.info(`  PR #${pr.id}: ${pr.title} (by ${pr.author.display_name})${approvalStatus}`);
           });
           logger.info('Please specify the PR ID directly');
           process.exit(1);
@@ -339,26 +353,40 @@ program
         logger.info(`Searching for pull requests matching JIRA ticket ${ticketId}...`);
         
         const prs = await client.getPullRequestsForTicket(ticketId);
-        const openPrs = prs.filter(pr => pr.state === 'OPEN');
+        
+        // Fetch full details to get participant info
+        const prsWithDetails = await Promise.all(
+          prs.map(async (pr) => {
+            const fullPr = await client.getPullRequestDetails(pr.id);
+            return fullPr || pr;
+          })
+        );
+        
+        const openPrs = prsWithDetails.filter(pr => pr.state === 'OPEN');
         
         if (openPrs.length === 0) {
           logger.error(`No open pull requests found for ticket ${ticketId}`);
-          if (prs.length > 0) {
+          if (prsWithDetails.length > 0) {
             logger.info('Found the following non-open PRs:');
-            prs.forEach(pr => {
-              logger.info(`  PR #${pr.id} (${pr.state}): ${pr.title}`);
+            prsWithDetails.forEach(pr => {
+              const hasApproval = pr.participants?.some(p => p.approved) || false;
+              const approvalStatus = hasApproval ? ' [APPROVED]' : '';
+              logger.info(`  PR #${pr.id} (${pr.state}): ${pr.title}${approvalStatus}`);
             });
           }
           process.exit(1);
         } else if (openPrs.length === 1) {
           pr = openPrs[0];
           prNumber = pr.id;
-          logger.info(`Found PR #${prNumber}: ${pr.title}`);
+          const hasApproval = pr.participants?.some(p => p.approved) || false;
+          logger.info(`Found PR #${prNumber}: ${pr.title}${hasApproval ? ' [Already approved]' : ''}`);
         } else {
           // Multiple open PRs, show them and ask user to be more specific
           logger.error(`Multiple open pull requests found for ticket ${ticketId}:`);
           openPrs.forEach(pr => {
-            logger.info(`  PR #${pr.id}: ${pr.title} (by ${pr.author.display_name})`);
+            const hasApproval = pr.participants?.some(p => p.approved) || false;
+            const approvalStatus = hasApproval ? ' [APPROVED]' : ' [Needs review]';
+            logger.info(`  PR #${pr.id}: ${pr.title} (by ${pr.author.display_name})${approvalStatus}`);
           });
           logger.info('Please specify the PR ID directly');
           process.exit(1);
@@ -581,6 +609,80 @@ Please provide:
       console.log(chalk.bold('\n=== Code Review Results ===\n'));
       console.log(review);
       
+    } catch (error: any) {
+      logger.error('Failed:', error.message);
+      process.exit(1);
+    }
+  });
+
+// Get PR details subcommand (for debugging)
+program
+  .command('get-pr <pr-id>')
+  .description('Get detailed information about a pull request')
+  .option('--repo <workspace/slug>', 'Specify repository instead of using current directory')
+  .option('-d, --dir <path>', 'Git repository directory', config.getDefaultRepoPath())
+  .option('--json', 'Output as JSON')
+  .action(async (prId, options) => {
+    let workspace: string;
+    let repoSlug: string;
+
+    // Get repository info
+    if (options.repo) {
+      const parts = options.repo.split('/');
+      if (parts.length !== 2) {
+        logger.error('Repository must be in format: workspace/repo-slug');
+        process.exit(1);
+      }
+      [workspace, repoSlug] = parts;
+    } else {
+      // Validate directory exists and is a git repo
+      const directory = path.resolve(options.dir);
+      if (!fs.existsSync(directory)) {
+        logger.error(`Directory does not exist: ${directory}`);
+        process.exit(1);
+      }
+      if (!fs.existsSync(path.join(directory, '.git'))) {
+        logger.error(`Not a git repository: ${directory}`);
+        process.exit(1);
+      }
+      
+      const repoInfo = getRepoInfo(directory);
+      if (!repoInfo) {
+        process.exit(1);
+      }
+      ({ workspace, repoSlug } = repoInfo);
+    }
+
+    // Create client
+    const client = new BitbucketClient({ workspace, repoSlug });
+
+    try {
+      const prNumber = parseInt(prId, 10);
+      if (isNaN(prNumber)) {
+        logger.error('Invalid PR ID. Must be a number.');
+        process.exit(1);
+      }
+
+      const pr = await client.getPullRequestDetails(prNumber);
+      if (!pr) {
+        logger.error(`Pull request #${prNumber} not found`);
+        process.exit(1);
+      }
+
+      if (options.json) {
+        console.log(JSON.stringify(pr, null, 2));
+      } else {
+        console.log(chalk.bold(`\nPull Request #${pr.id}: ${pr.title}`));
+        console.log(chalk.gray(`Author: ${pr.author.display_name} | Target: ${pr.destination.branch.name} | State: ${pr.state}\n`));
+        
+        if (pr.participants && pr.participants.length > 0) {
+          console.log(chalk.bold('Participants:'));
+          pr.participants.forEach(p => {
+            const approved = p.approved ? chalk.green('✓ Approved') : chalk.gray('Not approved');
+            console.log(`  ${p.user.display_name} (${p.role}) - ${approved}`);
+          });
+        }
+      }
     } catch (error: any) {
       logger.error('Failed:', error.message);
       process.exit(1);

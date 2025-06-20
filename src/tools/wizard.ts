@@ -378,8 +378,22 @@ async function promptBitbucket() {
           limit: 50
         });
 
-        if (prs.length === 0) {
-          logger.warn('No open PRs found targeting test branch');
+        // For review-pr, filter out PRs that are already approved
+        let filteredPrs = prs;
+        if (subcommand === 'review-pr') {
+          filteredPrs = prs.filter(pr => {
+            // Check if any participant has approved
+            const hasApproval = pr.participants?.some(p => p.approved) || false;
+            return !hasApproval;
+          });
+          
+          if (filteredPrs.length === 0 && prs.length > 0) {
+            logger.info(`Found ${prs.length} open PRs but all are already approved`);
+          }
+        }
+
+        if (filteredPrs.length === 0) {
+          logger.warn('No open PRs found targeting test branch' + (subcommand === 'review-pr' ? ' that need review' : ''));
           // Fall back to manual input
           const { prId } = await inquirer.prompt([
             {
@@ -400,11 +414,19 @@ async function promptBitbucket() {
           {
             name: 'selectedPr',
             type: 'list',
-            message: 'Select a pull request:',
-            choices: prs.map(pr => ({
-              name: `#${pr.id} - ${pr.title} (by ${pr.author.display_name})`,
-              value: pr.id
-            })),
+            message: 'Select a pull request' + (subcommand === 'review-pr' ? ' to review' : '') + ':',
+            choices: filteredPrs.map(pr => {
+              // Add approval status to the display for review-pr
+              let displayName = `#${pr.id} - ${pr.title} (by ${pr.author.display_name})`;
+              if (subcommand === 'review-pr' && pr.participants && pr.participants.length > 0) {
+                const reviewerCount = pr.participants.filter(p => p.role === 'REVIEWER').length;
+                displayName += ` [${reviewerCount} reviewer${reviewerCount !== 1 ? 's' : ''}]`;
+              }
+              return {
+                name: displayName,
+                value: pr.id
+              };
+            }),
             pageSize: 15
           },
         ]);
