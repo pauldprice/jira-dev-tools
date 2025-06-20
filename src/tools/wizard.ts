@@ -378,10 +378,20 @@ async function promptBitbucket() {
           limit: 50
         });
 
+        // Fetch full details for each PR to get participant info
+        logger.info(`Fetching full details for ${prs.length} PRs...`);
+        const prsWithDetails = await Promise.all(
+          prs.map(async (pr) => {
+            const fullPr = await client.getPullRequestDetails(pr.id);
+            return fullPr || pr;
+          })
+        );
+        logger.debug(`Fetched details for ${prsWithDetails.length} PRs`);
+
         // For review-pr, filter out PRs that are fully approved
-        let filteredPrs = prs;
+        let filteredPrs = prsWithDetails;
         if (subcommand === 'review-pr') {
-          filteredPrs = prs.filter(pr => {
+          filteredPrs = prsWithDetails.filter(pr => {
             if (!pr.participants || pr.participants.length === 0) {
               // No participants yet, include it
               return true;
@@ -398,8 +408,17 @@ async function promptBitbucket() {
             return !allReviewersApproved; // Include if not all reviewers have approved
           });
           
-          if (filteredPrs.length === 0 && prs.length > 0) {
-            logger.info(`Found ${prs.length} open PRs but all are fully approved`);
+          if (filteredPrs.length === 0 && prsWithDetails.length > 0) {
+            logger.info(`Found ${prsWithDetails.length} open PRs but all are fully approved`);
+          }
+          
+          // Debug: Check PR 4333 specifically
+          const pr4333 = prsWithDetails.find(pr => pr.id === 4333);
+          if (pr4333) {
+            logger.debug(`PR 4333 participants: ${JSON.stringify(pr4333.participants)}`);
+            const reviewers = pr4333.participants?.filter(p => p.role === 'REVIEWER') || [];
+            const allApproved = reviewers.length > 0 && reviewers.every(p => p.approved);
+            logger.debug(`PR 4333: ${reviewers.length} reviewers, all approved: ${allApproved}`);
           }
         }
 
