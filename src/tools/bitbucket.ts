@@ -249,8 +249,19 @@ program
           if (prsWithDetails.length > 0) {
             logger.info('Found the following non-open PRs:');
             prsWithDetails.forEach(pr => {
-              const hasApproval = pr.participants?.some(p => p.approved) || false;
-              const approvalStatus = hasApproval ? ' [APPROVED]' : '';
+              const reviewers = pr.participants?.filter(p => p.role === 'REVIEWER') || [];
+              const approvedReviewers = reviewers.filter(p => p.approved);
+              let approvalStatus = '';
+              
+              if (reviewers.length > 0 && approvedReviewers.length > 0) {
+                if (approvedReviewers.length === reviewers.length) {
+                  approvalStatus = ' [Fully approved]';
+                } else {
+                  const names = approvedReviewers.map(p => p.user.display_name).join(', ');
+                  approvalStatus = ` [Approved by: ${names}]`;
+                }
+              }
+              
               logger.info(`  PR #${pr.id} (${pr.state}): ${pr.title}${approvalStatus}`);
             });
           }
@@ -258,14 +269,39 @@ program
         } else if (openPrs.length === 1) {
           pr = openPrs[0];
           prNumber = pr.id;
-          const hasApproval = pr.participants?.some(p => p.approved) || false;
-          logger.info(`Found PR #${prNumber}: ${pr.title}${hasApproval ? ' [Already approved]' : ''}`);
+          
+          // Check approval status
+          const reviewers = pr.participants?.filter(p => p.role === 'REVIEWER') || [];
+          const approvedReviewers = reviewers.filter(p => p.approved);
+          let approvalStatus = '';
+          
+          if (reviewers.length > 0) {
+            if (approvedReviewers.length === reviewers.length) {
+              approvalStatus = ' [Fully approved]';
+            } else if (approvedReviewers.length > 0) {
+              const approverNames = approvedReviewers.map(p => p.user.display_name).join(', ');
+              approvalStatus = ` [Partially approved by: ${approverNames}]`;
+            }
+          }
+          
+          logger.info(`Found PR #${prNumber}: ${pr.title}${approvalStatus}`);
         } else {
           // Multiple open PRs, show them and ask user to be more specific
           logger.error(`Multiple open pull requests found for ticket ${ticketId}:`);
           openPrs.forEach(pr => {
-            const hasApproval = pr.participants?.some(p => p.approved) || false;
-            const approvalStatus = hasApproval ? ' [APPROVED]' : ' [Needs review]';
+            const reviewers = pr.participants?.filter(p => p.role === 'REVIEWER') || [];
+            const approvedReviewers = reviewers.filter(p => p.approved);
+            let approvalStatus = ' [Needs review]';
+            
+            if (reviewers.length > 0 && approvedReviewers.length > 0) {
+              if (approvedReviewers.length === reviewers.length) {
+                approvalStatus = ' [Fully approved]';
+              } else {
+                const names = approvedReviewers.map(p => p.user.display_name).join(', ');
+                approvalStatus = ` [Approved by: ${names}]`;
+              }
+            }
+            
             logger.info(`  PR #${pr.id}: ${pr.title} (by ${pr.author.display_name})${approvalStatus}`);
           });
           logger.info('Please specify the PR ID directly');
@@ -369,8 +405,19 @@ program
           if (prsWithDetails.length > 0) {
             logger.info('Found the following non-open PRs:');
             prsWithDetails.forEach(pr => {
-              const hasApproval = pr.participants?.some(p => p.approved) || false;
-              const approvalStatus = hasApproval ? ' [APPROVED]' : '';
+              const reviewers = pr.participants?.filter(p => p.role === 'REVIEWER') || [];
+              const approvedReviewers = reviewers.filter(p => p.approved);
+              let approvalStatus = '';
+              
+              if (reviewers.length > 0 && approvedReviewers.length > 0) {
+                if (approvedReviewers.length === reviewers.length) {
+                  approvalStatus = ' [Fully approved]';
+                } else {
+                  const names = approvedReviewers.map(p => p.user.display_name).join(', ');
+                  approvalStatus = ` [Approved by: ${names}]`;
+                }
+              }
+              
               logger.info(`  PR #${pr.id} (${pr.state}): ${pr.title}${approvalStatus}`);
             });
           }
@@ -378,14 +425,39 @@ program
         } else if (openPrs.length === 1) {
           pr = openPrs[0];
           prNumber = pr.id;
-          const hasApproval = pr.participants?.some(p => p.approved) || false;
-          logger.info(`Found PR #${prNumber}: ${pr.title}${hasApproval ? ' [Already approved]' : ''}`);
+          
+          // Check approval status
+          const reviewers = pr.participants?.filter(p => p.role === 'REVIEWER') || [];
+          const approvedReviewers = reviewers.filter(p => p.approved);
+          let approvalStatus = '';
+          
+          if (reviewers.length > 0) {
+            if (approvedReviewers.length === reviewers.length) {
+              approvalStatus = ' [Fully approved]';
+            } else if (approvedReviewers.length > 0) {
+              const approverNames = approvedReviewers.map(p => p.user.display_name).join(', ');
+              approvalStatus = ` [Partially approved by: ${approverNames}]`;
+            }
+          }
+          
+          logger.info(`Found PR #${prNumber}: ${pr.title}${approvalStatus}`);
         } else {
           // Multiple open PRs, show them and ask user to be more specific
           logger.error(`Multiple open pull requests found for ticket ${ticketId}:`);
           openPrs.forEach(pr => {
-            const hasApproval = pr.participants?.some(p => p.approved) || false;
-            const approvalStatus = hasApproval ? ' [APPROVED]' : ' [Needs review]';
+            const reviewers = pr.participants?.filter(p => p.role === 'REVIEWER') || [];
+            const approvedReviewers = reviewers.filter(p => p.approved);
+            let approvalStatus = ' [Needs review]';
+            
+            if (reviewers.length > 0 && approvedReviewers.length > 0) {
+              if (approvedReviewers.length === reviewers.length) {
+                approvalStatus = ' [Fully approved]';
+              } else {
+                const names = approvedReviewers.map(p => p.user.display_name).join(', ');
+                approvalStatus = ` [Approved by: ${names}]`;
+              }
+            }
+            
             logger.info(`  PR #${pr.id}: ${pr.title} (by ${pr.author.display_name})${approvalStatus}`);
           });
           logger.info('Please specify the PR ID directly');

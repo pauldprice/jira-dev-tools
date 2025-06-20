@@ -378,17 +378,28 @@ async function promptBitbucket() {
           limit: 50
         });
 
-        // For review-pr, filter out PRs that are already approved
+        // For review-pr, filter out PRs that are fully approved
         let filteredPrs = prs;
         if (subcommand === 'review-pr') {
           filteredPrs = prs.filter(pr => {
-            // Check if any participant has approved
-            const hasApproval = pr.participants?.some(p => p.approved) || false;
-            return !hasApproval;
+            if (!pr.participants || pr.participants.length === 0) {
+              // No participants yet, include it
+              return true;
+            }
+            
+            // Check if all reviewers have approved
+            const reviewers = pr.participants.filter(p => p.role === 'REVIEWER');
+            if (reviewers.length === 0) {
+              // No reviewers assigned yet, include it
+              return true;
+            }
+            
+            const allReviewersApproved = reviewers.every(p => p.approved);
+            return !allReviewersApproved; // Include if not all reviewers have approved
           });
           
           if (filteredPrs.length === 0 && prs.length > 0) {
-            logger.info(`Found ${prs.length} open PRs but all are already approved`);
+            logger.info(`Found ${prs.length} open PRs but all are fully approved`);
           }
         }
 
@@ -419,8 +430,17 @@ async function promptBitbucket() {
               // Add approval status to the display for review-pr
               let displayName = `#${pr.id} - ${pr.title} (by ${pr.author.display_name})`;
               if (subcommand === 'review-pr' && pr.participants && pr.participants.length > 0) {
-                const reviewerCount = pr.participants.filter(p => p.role === 'REVIEWER').length;
-                displayName += ` [${reviewerCount} reviewer${reviewerCount !== 1 ? 's' : ''}]`;
+                const reviewers = pr.participants.filter(p => p.role === 'REVIEWER');
+                const approvedReviewers = reviewers.filter(p => p.approved);
+                
+                if (approvedReviewers.length > 0) {
+                  // Show who has approved
+                  const approverNames = approvedReviewers.map(p => p.user.display_name).join(', ');
+                  displayName += ` [✓ ${approverNames}]`;
+                } else if (reviewers.length > 0) {
+                  // Show reviewer count if none have approved
+                  displayName += ` [${reviewers.length} reviewer${reviewers.length !== 1 ? 's' : ''}]`;
+                }
               }
               return {
                 name: displayName,
