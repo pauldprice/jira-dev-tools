@@ -395,13 +395,35 @@ program
         try {
           // Fetch JIRA ticket details
           const { spawnSync } = require('child_process');
-          const toolboxPath = path.join(__dirname, '../../..');
+          
+          // Find the toolbox script - it should be in the same directory we're running from
+          const possiblePaths = [
+            './toolbox',  // If running from toolbox directory
+            path.join(process.cwd(), 'toolbox'),  // Absolute path from cwd
+            path.join(__dirname, '../../../toolbox'),  // Relative to source file
+            path.join(__dirname, '../../toolbox'),  // One less level up
+          ];
+          
+          let toolboxScript = '';
+          for (const p of possiblePaths) {
+            if (fs.existsSync(p)) {
+              toolboxScript = p;
+              break;
+            }
+          }
+          
+          if (!toolboxScript) {
+            throw new Error('Could not find toolbox script');
+          }
+          
+          logger.debug(`Using toolbox script at: ${toolboxScript}`);
           
           // Use spawnSync for better error handling
-          const result = spawnSync(toolboxPath + '/toolbox', ['fetch-jira', ticketId, '--format', 'llm'], {
+          const result = spawnSync(toolboxScript, ['fetch-jira', ticketId, '--format', 'llm'], {
             encoding: 'utf-8',
-            cwd: options.dir || config.getDefaultRepoPath(),
-            env: { ...process.env }  // Pass through environment variables
+            cwd: process.cwd(),  // Use current working directory
+            env: { ...process.env },  // Pass through environment variables
+            shell: false
           });
           
           logger.debug(`Command exit code: ${result.status}`);
@@ -418,11 +440,17 @@ program
           
           // Check if we got valid output
           const jiraOutput = result.stdout;
-          if (jiraOutput && jiraOutput.trim() && !jiraOutput.includes('Error:') && !jiraOutput.includes('Failed')) {
-            jiraContext = `JIRA Ticket ${ticketId} Summary:\n${jiraOutput}\n`;
-            logger.debug(`Successfully fetched JIRA ticket ${ticketId}`);
+          if (jiraOutput && jiraOutput.trim()) {
+            // Extract the JSON part (after the status messages)
+            const jsonMatch = jiraOutput.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              jiraContext = `JIRA Ticket ${ticketId} Summary:\n${jsonMatch[0]}\n`;
+              logger.debug(`Successfully fetched JIRA ticket ${ticketId}`);
+            } else {
+              logger.debug(`JIRA ticket ${ticketId} output doesn't contain JSON: ${jiraOutput.substring(0, 200)}`);
+            }
           } else {
-            logger.debug(`JIRA ticket ${ticketId} fetch returned invalid output: ${jiraOutput}`);
+            logger.debug(`JIRA ticket ${ticketId} fetch returned empty output`);
           }
         } catch (error: any) {
           // Parse the error message
