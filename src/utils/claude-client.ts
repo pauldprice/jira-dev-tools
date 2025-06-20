@@ -30,6 +30,38 @@ export class ClaudeClient {
   }
   
   /**
+   * Generic analyze method for custom prompts
+   */
+  async analyze(
+    prompt: string,
+    options: {
+      maxTokens?: number;
+      temperature?: number;
+      system?: string;
+    } = {}
+  ): Promise<string> {
+    try {
+      const message = await this.client.messages.create({
+        model: this.model,
+        max_tokens: options.maxTokens || 2000,
+        temperature: options.temperature || 0.3,
+        system: options.system || 'You are a helpful AI assistant analyzing code and technical documentation.',
+        messages: [
+          {
+            role: 'user',
+            content: prompt
+          }
+        ]
+      });
+
+      return message.content[0].type === 'text' ? message.content[0].text : '';
+    } catch (error: any) {
+      logger.error(`Claude API error: ${error.message}`);
+      throw new Error(`Failed to analyze: ${error.message}`);
+    }
+  }
+
+  /**
    * Analyze code changes and generate a summary
    */
   async analyzeCodeChanges(

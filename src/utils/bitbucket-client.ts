@@ -337,6 +337,13 @@ export class BitbucketClient {
   }
 
   /**
+   * Get the API token for external use
+   */
+  getApiToken(): string {
+    return this.apiToken;
+  }
+
+  /**
    * Get diff stat for a pull request
    */
   async getPullRequestDiffStat(prId: number): Promise<string> {

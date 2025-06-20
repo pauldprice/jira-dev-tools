@@ -40,6 +40,55 @@ export class CachedClaudeClient extends ClaudeClient {
   }
 
   /**
+   * Override analyze method with caching
+   */
+  async analyze(
+    prompt: string,
+    options: {
+      maxTokens?: number;
+      temperature?: number;
+      system?: string;
+    } & CachedClaudeOptions = {}
+  ): Promise<string> {
+    const cacheOpts = { ...this.cacheOptions, ...options.cache };
+    
+    // Generate cache key from prompt and options
+    const cacheKey = this.generateCacheKey('analyze', {
+      prompt,
+      model: this.model,
+      temperature: options.temperature || 0.3,
+      maxTokens: options.maxTokens || 2000,
+      system: options.system
+    });
+
+    // Check cache
+    if (cacheOpts.enabled !== false) {
+      const cached = await this.cache.get<string>(cacheKey, cacheOpts.ttl);
+      if (cached) {
+        if (this.debug) {
+          logger.info(`Claude cache hit: analyze`);
+          logger.info(`Cache key: ${cacheKey.substring(0, 16)}...`);
+        }
+        return cached;
+      }
+    }
+
+    // Make actual API call
+    const result = await super.analyze(prompt, options);
+
+    // Cache result
+    if (cacheOpts.enabled !== false) {
+      await this.cache.set(cacheKey, result, {
+        method: 'analyze',
+        model: this.model,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    return result;
+  }
+
+  /**
    * Override analyzeCodeChanges with caching
    */
   async analyzeCodeChanges(

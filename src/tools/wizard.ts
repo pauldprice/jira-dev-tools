@@ -72,10 +72,20 @@ function buildCommand(commandId: string, answers: any): string {
     case 'bitbucket':
       parts.push('bitbucket', answers.subcommand);
       
-      if (answers.subcommand === 'diff-stat') {
+      if (answers.subcommand === 'diff-stat' || answers.subcommand === 'review-pr') {
+        // prId could be a number or a JIRA ticket string
         parts.push(answers.prId.toString());
         if (answers.directory && answers.directory !== config.getDefaultRepoPath()) {
           parts.push('--dir', answers.directory);
+        }
+        // Add review-pr specific options
+        if (answers.subcommand === 'review-pr') {
+          if (answers.model && answers.model !== 'sonnet') {
+            parts.push('--model', answers.model);
+          }
+          if (answers.focus) {
+            parts.push('--focus', answers.focus);
+          }
         }
       } else {
         // list-prs options
@@ -303,7 +313,8 @@ async function promptBitbucket() {
       message: 'Bitbucket Action:',
       choices: [
         { name: 'List Pull Requests', value: 'list-prs' },
-        { name: 'Show PR Diff Statistics', value: 'diff-stat' }
+        { name: 'Show PR Diff Statistics', value: 'diff-stat' },
+        { name: 'Review Pull Request (AI Code Review)', value: 'review-pr' }
       ],
       default: 'list-prs',
     },
@@ -332,8 +343,8 @@ async function promptBitbucket() {
     },
   ]);
 
-  // Handle diff-stat subcommand
-  if (subcommand === 'diff-stat') {
+  // Handle diff-stat and review-pr subcommands
+  if (subcommand === 'diff-stat' || subcommand === 'review-pr') {
     // Get repository info to fetch PRs
     let repoInfo;
     try {
@@ -398,24 +409,94 @@ async function promptBitbucket() {
           },
         ]);
 
+        // For review-pr, ask additional options
+        if (subcommand === 'review-pr') {
+          const reviewOptions = await inquirer.prompt([
+            {
+              name: 'model',
+              type: 'list',
+              message: 'Select Claude model for review:',
+              choices: [
+                { name: 'Claude Haiku (fast, basic)', value: 'haiku' },
+                { name: 'Claude Sonnet (balanced)', value: 'sonnet' },
+                { name: 'Claude Opus (thorough)', value: 'opus' }
+              ],
+              default: 'sonnet'
+            },
+            {
+              name: 'focus',
+              type: 'list',
+              message: 'Focus area (optional):',
+              choices: [
+                { name: 'No specific focus', value: '' },
+                { name: 'Security', value: 'security' },
+                { name: 'Performance', value: 'performance' },
+                { name: 'Testing', value: 'testing' },
+                { name: 'Code Quality', value: 'code-quality' }
+              ],
+              default: ''
+            }
+          ]);
+          return { subcommand, directory, prId: selectedPr, ...reviewOptions };
+        }
+
         return { subcommand, directory, prId: selectedPr };
       } catch (error) {
         logger.warn('Could not fetch PRs, falling back to manual input');
       }
     }
 
-    // Fallback to manual PR ID input
+    // Fallback to manual input - accept PR ID or JIRA ticket
     const { prId } = await inquirer.prompt([
       {
         name: 'prId',
         type: 'input',
-        message: 'Enter PR ID:',
+        message: 'Enter PR ID or JIRA ticket (e.g., 123 or APP-1234):',
         validate: (input: string) => {
+          // Check if it's a JIRA ticket format
+          if (/^[A-Z]+-\d+$/.test(input)) {
+            return true;
+          }
+          // Check if it's a valid PR number
           const num = parseInt(input, 10);
-          return !isNaN(num) && num > 0 || 'Please enter a valid PR number';
+          if (!isNaN(num) && num > 0) {
+            return true;
+          }
+          return 'Please enter a valid PR number or JIRA ticket ID (e.g., APP-1234)';
         },
       },
     ]);
+
+    // For review-pr, ask additional options
+    if (subcommand === 'review-pr') {
+      const reviewOptions = await inquirer.prompt([
+        {
+          name: 'model',
+          type: 'list',
+          message: 'Select Claude model for review:',
+          choices: [
+            { name: 'Claude Haiku (fast, basic)', value: 'haiku' },
+            { name: 'Claude Sonnet (balanced)', value: 'sonnet' },
+            { name: 'Claude Opus (thorough)', value: 'opus' }
+          ],
+          default: 'sonnet'
+        },
+        {
+          name: 'focus',
+          type: 'list',
+          message: 'Focus area (optional):',
+          choices: [
+            { name: 'No specific focus', value: '' },
+            { name: 'Security', value: 'security' },
+            { name: 'Performance', value: 'performance' },
+            { name: 'Testing', value: 'testing' },
+            { name: 'Code Quality', value: 'code-quality' }
+          ],
+          default: ''
+        }
+      ]);
+      return { subcommand, directory, prId, ...reviewOptions };
+    }
 
     return { subcommand, directory, prId };
   }
