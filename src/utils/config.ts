@@ -19,6 +19,7 @@ export interface ToolboxConfig extends JiraConfig, AnthropicConfig {
   VERBOSE?: boolean;
   NO_COLOR?: boolean;
   BITBUCKET_ACCESS_TOKEN?: string;
+  DEFAULT_REPO_PATH?: string;
 }
 
 export class ConfigLoader {
@@ -60,6 +61,7 @@ export class ConfigLoader {
       JIRA_API_TOKEN: process.env.JIRA_API_TOKEN,
       ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
       BITBUCKET_ACCESS_TOKEN: process.env.BITBUCKET_ACCESS_TOKEN,
+      DEFAULT_REPO_PATH: process.env.DEFAULT_REPO_PATH,
       VERBOSE: process.env.VERBOSE === 'true' || 
                process.argv.includes('--verbose') || 
                process.argv.includes('-v'),
@@ -165,6 +167,9 @@ export class ConfigLoader {
             if (config.BITBUCKET_ACCESS_TOKEN && !process.env.BITBUCKET_ACCESS_TOKEN) {
               process.env.BITBUCKET_ACCESS_TOKEN = config.BITBUCKET_ACCESS_TOKEN;
             }
+            if (config.DEFAULT_REPO_PATH && !process.env.DEFAULT_REPO_PATH) {
+              process.env.DEFAULT_REPO_PATH = config.DEFAULT_REPO_PATH;
+            }
           } catch {
             // If not JSON, try key=value format
             const lines = content.split('\n');
@@ -184,6 +189,8 @@ export class ConfigLoader {
                     process.env.JIRA_API_TOKEN = value;
                   } else if (key === 'BITBUCKET_ACCESS_TOKEN' && !process.env.BITBUCKET_ACCESS_TOKEN) {
                     process.env.BITBUCKET_ACCESS_TOKEN = value;
+                  } else if (key === 'DEFAULT_REPO_PATH' && !process.env.DEFAULT_REPO_PATH) {
+                    process.env.DEFAULT_REPO_PATH = value;
                   }
                 }
               }
@@ -220,6 +227,10 @@ export class ConfigLoader {
 
   isVerbose(): boolean {
     return this.config.VERBOSE === true;
+  }
+
+  getDefaultRepoPath(): string {
+    return this.config.DEFAULT_REPO_PATH || process.cwd();
   }
 
   validate(requiredKeys: (keyof ToolboxConfig)[]): void {

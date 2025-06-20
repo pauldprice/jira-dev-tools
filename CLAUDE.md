@@ -38,7 +38,8 @@ Example JSON format:
   "JIRA_BASE_URL": "https://your-domain.atlassian.net",
   "JIRA_EMAIL": "your-email@example.com",
   "JIRA_API_TOKEN": "your-jira-api-token",
-  "BITBUCKET_ACCESS_TOKEN": "your-bitbucket-access-token"
+  "BITBUCKET_ACCESS_TOKEN": "your-bitbucket-access-token",
+  "DEFAULT_REPO_PATH": "/Users/paul/code/gather/webapp"
 }
 ```
 
@@ -49,9 +50,19 @@ JIRA_BASE_URL=https://your-domain.atlassian.net
 JIRA_EMAIL=your-email@example.com
 JIRA_API_TOKEN=your-jira-api-token
 BITBUCKET_ACCESS_TOKEN=your-bitbucket-access-token
+DEFAULT_REPO_PATH=/Users/paul/code/gather/webapp
 ```
 
 Note: Environment variables always take precedence over config files.
+
+### Configuration Options
+
+- **ANTHROPIC_API_KEY**: Your Claude API key
+- **JIRA_BASE_URL**: Your JIRA instance URL (e.g., https://company.atlassian.net)
+- **JIRA_EMAIL**: Email for JIRA authentication
+- **JIRA_API_TOKEN**: JIRA API token (create at: JIRA Settings → Security → API tokens)
+- **BITBUCKET_ACCESS_TOKEN**: Bitbucket access token for PR integration
+- **DEFAULT_REPO_PATH**: Default git repository path for commands that work with repos
 
 ## Key Components
 

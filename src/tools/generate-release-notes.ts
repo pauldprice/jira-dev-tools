@@ -34,7 +34,7 @@ program
   .description('Generate release notes from git commits between branches or from JIRA Fix Version')
   .option('--version <version>', 'release version (e.g., V17.01.00)')
   .option('--fix-version <version>', 'generate notes for all tickets with this JIRA Fix Version')
-  .option('-p, --repo <path>', 'path to git repository (default: current directory)', process.cwd())
+  .option('-p, --repo <path>', 'path to git repository', appConfig.getDefaultRepoPath())
   .option('-s, --source <branch>', 'source branch with new commits (default: origin/test)', 'origin/test')
   .option('-t, --target <branch>', 'target branch to compare against (default: origin/master)', 'origin/master')
   .option('-o, --output <file>', 'output file name')

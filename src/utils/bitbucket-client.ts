@@ -1,5 +1,5 @@
 import { config as appConfig } from './config';
-import { logger } from './logger';
+import { logger } from './enhanced-logger';
 import { cachedFetch } from './cached-fetch';
 
 export interface BitbucketPullRequest {
@@ -236,6 +236,103 @@ export class BitbucketClient {
     } catch (error: any) {
       logger.debug(`Failed to get branch PR: ${error.message}`);
       return null;
+    }
+  }
+
+  /**
+   * List pull requests with filtering options
+   */
+  async listPullRequests(options: {
+    state?: 'OPEN' | 'MERGED' | 'DECLINED' | 'SUPERSEDED' | 'ALL';
+    author?: string;
+    targetBranch?: string;
+    limit?: number;
+  } = {}): Promise<BitbucketPullRequest[]> {
+    if (!this.apiToken) {
+      logger.warn('No Bitbucket access token found');
+      return [];
+    }
+
+    const { state = 'ALL', author, targetBranch, limit = 50 } = options;
+    const queryParams = new URLSearchParams();
+    
+    // Bitbucket API only supports state filtering, so we'll need to fetch more results
+    // and filter client-side for author and target branch
+    const fetchLimit = author || targetBranch ? 50 : Math.min(limit, 50);
+    if (limit > 50 && !author && !targetBranch) {
+      logger.warn(`Bitbucket API has a maximum page length of 50. Limiting to 50 results.`);
+    }
+    queryParams.set('pagelen', fetchLimit.toString());
+    
+    // Only state is supported as a query parameter
+    if (state !== 'ALL') {
+      queryParams.set('state', state);
+    }
+    
+    try {
+      const url = `${this.baseUrl}/repositories/${this.workspace}/${this.repoSlug}/pullrequests?${queryParams.toString()}`;
+      logger.info(`Fetching PRs from: ${url}`);
+      
+      let response;
+      try {
+        response = await cachedFetch.fetch(url, {
+          headers: {
+            'Authorization': `Bearer ${this.apiToken}`,
+            'Accept': 'application/json'
+          },
+          cacheOptions: {
+            namespace: 'bitbucket',
+            ttl: 5 * 60 * 1000 // Cache for 5 minutes
+          }
+        });
+      } catch (fetchError: any) {
+        logger.error('Fetch failed:', fetchError.message || fetchError);
+        throw new Error(`Network error: ${fetchError.message || 'Unknown fetch error'}`);
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        if (response.status === 401) {
+          throw new Error('Authentication failed. Check BITBUCKET_ACCESS_TOKEN');
+        } else {
+          throw new Error(`Bitbucket API error: ${response.status} ${response.statusText}. Response: ${errorText}`);
+        }
+      }
+
+      let data;
+      try {
+        data = await response.json() as { values?: BitbucketPullRequest[]; error?: any };
+      } catch (parseError: any) {
+        throw new Error(`Failed to parse response: ${parseError.message}`);
+      }
+      
+      if (data.error) {
+        throw new Error(`Bitbucket API error: ${JSON.stringify(data.error)}`);
+      }
+      
+      let results = data.values || [];
+      
+      // Apply client-side filters
+      if (author) {
+        const authorLower = author.toLowerCase();
+        results = results.filter(pr => 
+          pr.author.display_name.toLowerCase().includes(authorLower)
+        );
+      }
+      
+      if (targetBranch) {
+        const targetLower = targetBranch.toLowerCase();
+        results = results.filter(pr => 
+          pr.destination.branch.name.toLowerCase().includes(targetLower)
+        );
+      }
+      
+      // Limit results to requested amount
+      return results.slice(0, limit);
+    } catch (error: any) {
+      logger.error(`Failed to list pull requests: ${error.message || error}`);
+      logger.debug('Full error:', JSON.stringify(error, null, 2));
+      throw error; // Re-throw to let the caller handle it
     }
   }
 }

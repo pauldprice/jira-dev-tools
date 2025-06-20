@@ -3,6 +3,7 @@
 import { Command } from 'commander';
 import inquirer from 'inquirer';
 import { logger } from '../utils/enhanced-logger';
+import { config } from '../utils/config';
 import * as path from 'path';
 import * as fs from 'fs';
 import { execSync } from 'child_process';
@@ -66,6 +67,28 @@ function buildCommand(commandId: string, answers: any): string {
         parts.push('--namespace', answers.namespace);
       }
       break;
+      
+    case 'bitbucket':
+      parts.push('bitbucket', answers.subcommand);
+      if (answers.directory && answers.directory !== config.getDefaultRepoPath()) {
+        parts.push('--dir', answers.directory);
+      }
+      if (answers.state !== 'ALL') {
+        parts.push('--state', answers.state);
+      }
+      if (answers.author) {
+        parts.push('--author', answers.author);
+      }
+      if (answers.target) {
+        parts.push('--target', answers.target);
+      }
+      if (answers.limit !== '20') {
+        parts.push('--limit', answers.limit);
+      }
+      if (answers.json) {
+        parts.push('--json');
+      }
+      break;
   }
   
   return parts.join(' ');
@@ -102,13 +125,7 @@ async function promptReleaseNotes() {
       name: 'repo',
       type: 'input',
       message: 'Repository Path:',
-      default: () => {
-        const webappPath = '/Users/paul/code/gather/webapp';
-        if (fs.existsSync(webappPath)) {
-          return webappPath;
-        }
-        return process.cwd();
-      },
+      default: config.getDefaultRepoPath(),
       validate: (input: string) => {
         const absPath = path.resolve(input);
         if (!fs.existsSync(absPath)) {
@@ -268,6 +285,89 @@ async function promptCache() {
   return { action, namespace };
 }
 
+async function promptBitbucket() {
+  const { subcommand } = await inquirer.prompt([
+    {
+      name: 'subcommand',
+      type: 'list',
+      message: 'Bitbucket Action:',
+      choices: [
+        { name: 'List Pull Requests', value: 'list-prs' }
+      ],
+      default: 'list-prs',
+    },
+  ]);
+
+  // Ask for directory
+  const { directory } = await inquirer.prompt([
+    {
+      name: 'directory',
+      type: 'input',
+      message: 'Git repository directory:',
+      default: config.getDefaultRepoPath(),
+      validate: (input: string) => {
+        if (!input.trim()) {
+          return true; // Allow empty to use default
+        }
+        const absPath = path.resolve(input);
+        if (!fs.existsSync(absPath)) {
+          return 'Directory does not exist';
+        }
+        if (!fs.existsSync(path.join(absPath, '.git'))) {
+          return 'Not a git repository';
+        }
+        return true;
+      },
+    },
+  ]);
+
+  // For now, we only have list-prs
+  const commonAnswers = await inquirer.prompt([
+    {
+      name: 'state',
+      type: 'list',
+      message: 'PR State:',
+      choices: [
+        { name: 'Open', value: 'OPEN' },
+        { name: 'Merged', value: 'MERGED' },
+        { name: 'Declined', value: 'DECLINED' },
+        { name: 'All', value: 'ALL' },
+      ],
+      default: 'OPEN',
+    },
+    {
+      name: 'author',
+      type: 'input',
+      message: 'Filter by author (optional):',
+      default: '',
+    },
+    {
+      name: 'target',
+      type: 'input',
+      message: 'Filter by target branch (optional):',
+      default: '',
+    },
+    {
+      name: 'limit',
+      type: 'input',
+      message: 'Maximum number of PRs:',
+      default: '20',
+      validate: (input: string) => {
+        const num = parseInt(input, 10);
+        return !isNaN(num) && num > 0 && num <= 100 || 'Please enter a number between 1 and 100';
+      },
+    },
+    {
+      name: 'json',
+      type: 'confirm',
+      message: 'Output as JSON?',
+      default: false,
+    },
+  ]);
+
+  return { subcommand, directory, ...commonAnswers };
+}
+
 program
   .name('wizard')
   .description('Interactive CLI wizard to help build toolbox commands')
@@ -287,6 +387,7 @@ program
             { name: 'Fetch JIRA Ticket - Fetch and format JIRA ticket information', value: 'fetch-jira' },
             { name: 'Generate Release Notes - Generate release notes from git commits and JIRA tickets', value: 'release-notes' },
             { name: 'Analyze PDF - Analyze a PDF file using AI vision', value: 'analyze-pdf' },
+            { name: 'Bitbucket - Interact with Bitbucket repositories', value: 'bitbucket' },
             { name: 'Cache Management - Manage the toolbox cache', value: 'cache' },
           ],
         },
@@ -305,6 +406,9 @@ program
           break;
         case 'analyze-pdf':
           answers = await promptAnalyzePdf();
+          break;
+        case 'bitbucket':
+          answers = await promptBitbucket();
           break;
         case 'cache':
           answers = await promptCache();
