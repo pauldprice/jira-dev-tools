@@ -1,262 +1,345 @@
 #!/usr/bin/env ts-node
 
 import { Command } from 'commander';
-import express from 'express';
-import * as path from 'path';
-import open from 'open';
+import inquirer from 'inquirer';
 import { logger } from '../utils/enhanced-logger';
-import { createServer } from 'http';
-import * as net from 'net';
+import * as path from 'path';
+import * as fs from 'fs';
+import { execSync } from 'child_process';
 
 const program = new Command();
 
-// Helper function to check if a port is available
-const isPortAvailable = (port: number): Promise<boolean> => {
-  return new Promise((resolve) => {
-    const tester = net.createServer()
-      .once('error', () => resolve(false))
-      .once('listening', () => {
-        tester.once('close', () => resolve(true)).close();
-      })
-      .listen(port);
-  });
-};
+// Command definitions with their options
+const commands = [
+  {
+    id: 'fetch-jira',
+    name: 'Fetch JIRA Ticket',
+    description: 'Fetch and format JIRA ticket information',
+    category: 'jira',
+    options: [
+      {
+        name: 'ticketId',
+        type: 'input',
+        message: 'Ticket ID:',
+        validate: (input: string) => /^[A-Z]+-\d+$/.test(input) || 'Please enter a valid ticket ID (e.g., APP-1234)',
+      },
+      {
+        name: 'format',
+        type: 'list',
+        message: 'Output Format:',
+        choices: ['llm', 'raw'],
+        default: 'llm',
+      },
+      {
+        name: 'excludeComments',
+        type: 'confirm',
+        message: 'Exclude Comments?',
+        default: false,
+      },
+    ],
+  },
+  {
+    id: 'release-notes',
+    name: 'Generate Release Notes',
+    description: 'Generate release notes from git commits and JIRA tickets',
+    category: 'release',
+    options: [
+      {
+        name: 'repo',
+        type: 'input',
+        message: 'Repository Path:',
+        default: () => {
+          // Smart default: check for common webapp path
+          const webappPath = '/Users/paul/code/gather/webapp';
+          if (fs.existsSync(webappPath)) {
+            return webappPath;
+          }
+          return process.cwd();
+        },
+        validate: (input: string) => {
+          const absPath = path.resolve(input);
+          if (!fs.existsSync(absPath)) {
+            return 'Path does not exist';
+          }
+          if (!fs.existsSync(path.join(absPath, '.git'))) {
+            return 'Not a git repository';
+          }
+          return true;
+        },
+      },
+      {
+        name: 'generationMode',
+        type: 'list',
+        message: 'Generation Mode:',
+        choices: [
+          { name: 'Branch comparison (test vs master)', value: 'branch' },
+          { name: 'Fix Version (all tickets with specific version)', value: 'fixVersion' },
+        ],
+        default: 'branch',
+      },
+      {
+        name: 'source',
+        type: 'input',
+        message: 'Source Branch:',
+        default: 'origin/test',
+        when: (answers: any) => answers.generationMode === 'branch',
+      },
+      {
+        name: 'target',
+        type: 'input',
+        message: 'Target Branch:',
+        default: 'origin/master',
+        when: (answers: any) => answers.generationMode === 'branch',
+      },
+      {
+        name: 'fixVersion',
+        type: 'input',
+        message: 'Fix Version (e.g., V17.02.00):',
+        when: (answers: any) => answers.generationMode === 'fixVersion',
+        validate: (input: string) => input.trim() !== '' || 'Fix Version is required',
+      },
+      {
+        name: 'aiModel',
+        type: 'list',
+        message: 'AI Model:',
+        choices: [
+          { name: 'None (no AI analysis)', value: 'none' },
+          { name: 'Claude Haiku (fast, basic)', value: 'haiku' },
+          { name: 'Claude Sonnet (balanced)', value: 'sonnet' },
+          { name: 'Claude Opus (advanced)', value: 'opus' },
+        ],
+        default: 'sonnet',
+      },
+      {
+        name: 'pdf',
+        type: 'confirm',
+        message: 'Generate PDF?',
+        default: true,
+      },
+      {
+        name: 'includePrDescriptions',
+        type: 'confirm',
+        message: 'Include PR Descriptions?',
+        default: false,
+      },
+    ],
+  },
+  {
+    id: 'analyze-pdf',
+    name: 'Analyze PDF',
+    description: 'Analyze a PDF file using AI vision',
+    category: 'analysis',
+    options: [
+      {
+        name: 'file',
+        type: 'input',
+        message: 'PDF File Path:',
+        default: () => {
+          // Look for recently generated release notes
+          const files = fs.readdirSync('.')
+            .filter(f => f.endsWith('.pdf') && f.includes('release_notes'))
+            .sort((a, b) => fs.statSync(b).mtime.getTime() - fs.statSync(a).mtime.getTime());
+          return files[0] || '';
+        },
+        validate: (input: string) => {
+          const absPath = path.resolve(input);
+          if (!fs.existsSync(absPath)) {
+            return 'File does not exist';
+          }
+          if (!input.endsWith('.pdf')) {
+            return 'File must be a PDF';
+          }
+          return true;
+        },
+      },
+      {
+        name: 'focus',
+        type: 'list',
+        message: 'Analysis Focus:',
+        choices: [
+          { name: 'All aspects', value: 'all' },
+          { name: 'Layout', value: 'layout' },
+          { name: 'Readability', value: 'readability' },
+          { name: 'Formatting', value: 'formatting' },
+          { name: 'Accessibility', value: 'accessibility' },
+        ],
+        default: 'all',
+      },
+      {
+        name: 'json',
+        type: 'confirm',
+        message: 'JSON Output?',
+        default: false,
+      },
+    ],
+  },
+  {
+    id: 'cache',
+    name: 'Cache Management',
+    description: 'Manage the toolbox cache',
+    category: 'utility',
+    options: [
+      {
+        name: 'action',
+        type: 'list',
+        message: 'Action:',
+        choices: ['stats', 'clear'],
+        default: 'stats',
+      },
+      {
+        name: 'namespace',
+        type: 'list',
+        message: 'Namespace:',
+        choices: ['all', 'jira', 'claude', 'fetch', 'bitbucket'],
+        default: 'all',
+        when: (answers: any) => answers.action === 'clear',
+      },
+    ],
+  },
+];
 
-// Helper function to find an available port
-const findAvailablePort = async (startPort: number, maxAttempts: number = 10): Promise<number> => {
-  for (let i = 0; i < maxAttempts; i++) {
-    const port = startPort + i;
-    if (await isPortAvailable(port)) {
-      return port;
-    }
+// Build command from answers
+function buildCommand(commandId: string, answers: any): string {
+  const parts = ['./toolbox'];
+  
+  switch (commandId) {
+    case 'fetch-jira':
+      parts.push('fetch-jira', answers.ticketId);
+      if (answers.format !== 'llm') {
+        parts.push('--format', answers.format);
+      }
+      if (answers.excludeComments) {
+        parts.push('--no-comments');
+      }
+      break;
+      
+    case 'release-notes':
+      parts.push('release-notes');
+      parts.push('--repo', answers.repo);
+      
+      if (answers.generationMode === 'fixVersion') {
+        parts.push('--fix-version', answers.fixVersion);
+      } else {
+        if (answers.source !== 'origin/test') {
+          parts.push('--source', answers.source);
+        }
+        if (answers.target !== 'origin/master') {
+          parts.push('--target', answers.target);
+        }
+      }
+      
+      if (answers.aiModel !== 'none') {
+        parts.push('--ai-model', answers.aiModel);
+      }
+      if (answers.pdf) {
+        parts.push('--pdf');
+      }
+      if (answers.includePrDescriptions) {
+        parts.push('--include-pr-descriptions');
+      }
+      break;
+      
+    case 'analyze-pdf':
+      parts.push('analyze-pdf', answers.file);
+      if (answers.focus !== 'all') {
+        parts.push('--focus', answers.focus);
+      }
+      if (answers.json) {
+        parts.push('--json');
+      }
+      break;
+      
+    case 'cache':
+      parts.push('cache', answers.action);
+      if (answers.namespace && answers.namespace !== 'all') {
+        parts.push('--namespace', answers.namespace);
+      }
+      break;
   }
-  throw new Error(`No available ports found between ${startPort} and ${startPort + maxAttempts - 1}`);
-};
+  
+  return parts.join(' ');
+}
 
 program
   .name('wizard')
-  .description('Launch an interactive web-based wizard to help build toolbox commands')
-  .option('-p, --port <port>', 'Port to run the wizard on', '3456')
-  .option('--no-open', 'Do not automatically open browser')
-  .option('--auto-port', 'Automatically find an available port if the specified one is in use')
+  .description('Interactive CLI wizard to help build toolbox commands')
+  .option('--dry-run', 'Show the command without executing it')
   .action(async (options) => {
-    const app = express();
-    let port = parseInt(options.port, 10);
+    logger.info('Welcome to the Toolbox Wizard!');
+    logger.info('This will help you build and run toolbox commands interactively.\n');
     
-    // Check if we should auto-find a port
-    if (options.autoPort) {
-      const available = await isPortAvailable(port);
-      if (!available) {
-        logger.warn(`Port ${port} is in use, finding an available port...`);
-        try {
-          port = await findAvailablePort(port);
-          logger.info(`Using port ${port}`);
-        } catch (error) {
-          logger.error('Could not find an available port');
-          process.exit(1);
-        }
-      }
-    }
-
-    // Serve static files from the wizard public directory
-    // Get the project root directory (where package.json is)
-    const projectRoot = path.resolve(__dirname, '../..');
-    const publicPath = path.join(projectRoot, 'wizard/public');
-    
-    logger.debug(`Serving static files from: ${publicPath}`);
-    app.use(express.static(publicPath));
-
-    // API endpoint to get available commands
-    app.get('/api/commands', (_, res) => {
-      res.json({
-        commands: [
-          {
-            id: 'fetch-jira',
-            name: 'Fetch JIRA Ticket',
-            description: 'Fetch and format JIRA ticket information',
-            category: 'jira',
-            options: [
-              {
-                name: 'ticketId',
-                type: 'text',
-                label: 'Ticket ID',
-                placeholder: 'APP-1234',
-                required: true,
-                pattern: '^[A-Z]+-\\d+$',
-              },
-              {
-                name: 'format',
-                type: 'select',
-                label: 'Output Format',
-                options: ['default', 'markdown', 'json'],
-                default: 'default',
-              },
-              {
-                name: 'includeComments',
-                type: 'checkbox',
-                label: 'Include Comments',
-                default: false,
-              },
-            ],
-          },
-          {
-            id: 'release-notes',
-            name: 'Generate Release Notes',
-            description: 'Generate release notes from git commits and JIRA tickets',
-            category: 'release',
-            options: [
-              {
-                name: 'repo',
-                type: 'text',
-                label: 'Repository Path',
-                placeholder: '/path/to/repo',
-                required: true,
-              },
-              {
-                name: 'source',
-                type: 'text',
-                label: 'Source Branch',
-                placeholder: 'origin/test',
-                default: 'origin/test',
-              },
-              {
-                name: 'target',
-                type: 'text',
-                label: 'Target Branch',
-                placeholder: 'origin/master',
-                default: 'origin/master',
-              },
-              {
-                name: 'fixVersion',
-                type: 'text',
-                label: 'Fix Version',
-                placeholder: 'V17.02.00',
-              },
-              {
-                name: 'aiModel',
-                type: 'select',
-                label: 'AI Model',
-                options: ['none', 'haiku', 'sonnet', 'opus'],
-                default: 'sonnet',
-              },
-              {
-                name: 'pdf',
-                type: 'checkbox',
-                label: 'Generate PDF',
-                default: true,
-              },
-              {
-                name: 'includePrDescriptions',
-                type: 'checkbox',
-                label: 'Include PR Descriptions',
-                default: false,
-              },
-            ],
-          },
-          {
-            id: 'analyze-pdf',
-            name: 'Analyze PDF',
-            description: 'Analyze a PDF file using AI vision',
-            category: 'analysis',
-            options: [
-              {
-                name: 'file',
-                type: 'text',
-                label: 'PDF File Path',
-                placeholder: '/path/to/file.pdf',
-                required: true,
-              },
-              {
-                name: 'focus',
-                type: 'select',
-                label: 'Analysis Focus',
-                options: ['all', 'layout', 'readability', 'formatting', 'accessibility'],
-                default: 'all',
-              },
-              {
-                name: 'json',
-                type: 'checkbox',
-                label: 'JSON Output',
-                default: false,
-              },
-            ],
-          },
-          {
-            id: 'cache',
-            name: 'Cache Management',
-            description: 'Manage the toolbox cache',
-            category: 'utility',
-            options: [
-              {
-                name: 'action',
-                type: 'select',
-                label: 'Action',
-                options: ['stats', 'clear'],
-                default: 'stats',
-                required: true,
-              },
-              {
-                name: 'namespace',
-                type: 'select',
-                label: 'Namespace',
-                options: ['all', 'jira', 'claude', 'fetch', 'bitbucket'],
-                default: 'all',
-                showWhen: { action: 'clear' },
-              },
-            ],
-          },
-        ],
-      });
-    });
-
-    // Serve the React app for the root route
-    app.get('/', (_, res) => {
-      res.sendFile(path.join(publicPath, 'index.html'));
-    });
-    
-    // Handle any other routes by serving the React app
-    app.use((_, res) => {
-      res.sendFile(path.join(publicPath, 'index.html'));
-    });
-
-    const server = createServer(app);
-
-    server.on('error', (error: any) => {
-      if (error.code === 'EADDRINUSE') {
-        logger.error(`Port ${port} is already in use.`);
-        logger.info(`Try one of these options:`);
-        logger.info(`  1. Use a different port: ./toolbox wizard --port 3457`);
-        logger.info(`  2. Find and stop the process using port ${port}:`);
-        logger.info(`     lsof -ti:${port} | xargs kill -9`);
-        process.exit(1);
-      } else if (error.code === 'EACCES') {
-        logger.error(`Permission denied to use port ${port}.`);
-        logger.info(`Try using a port number above 1024.`);
-        process.exit(1);
-      } else {
-        logger.error(`Server error: ${error.message}`);
-        process.exit(1);
-      }
-    });
-
-    server.listen(port, () => {
-      logger.success(`Toolbox Wizard running at http://localhost:${port}`);
+    try {
+      // First, ask which command to run
+      const { selectedCommand } = await inquirer.prompt([
+        {
+          type: 'list',
+          name: 'selectedCommand',
+          message: 'Which command would you like to run?',
+          choices: commands.map(cmd => ({
+            name: `${cmd.name} - ${cmd.description}`,
+            value: cmd.id,
+          })),
+        },
+      ]);
       
-      if (options.open) {
-        logger.info('Opening browser...');
-        open(`http://localhost:${port}`);
+      // Find the selected command
+      const command = commands.find(cmd => cmd.id === selectedCommand);
+      if (!command) {
+        logger.error('Command not found');
+        process.exit(1);
       }
-
-      logger.info('Press Ctrl+C to stop the wizard');
-    });
-
-    // Handle graceful shutdown
-    process.on('SIGINT', () => {
-      logger.info('\nShutting down wizard...');
-      server.close(() => {
-        process.exit(0);
-      });
-    });
+      
+      logger.info(`\nConfiguring ${command.name}...\n`);
+      
+      // Ask for command-specific options
+      const answers = await inquirer.prompt(command.options as any);
+      
+      // Build the command
+      const fullCommand = buildCommand(selectedCommand, answers);
+      
+      logger.info('\nGenerated command:');
+      logger.info(fullCommand);
+      
+      if (options.dryRun) {
+        logger.info('\n(Dry run - command not executed)');
+        return;
+      }
+      
+      // Ask for confirmation
+      const { shouldRun } = await inquirer.prompt([
+        {
+          type: 'confirm',
+          name: 'shouldRun',
+          message: 'Run this command?',
+          default: true,
+        },
+      ]);
+      
+      if (shouldRun) {
+        logger.info('\nExecuting command...\n');
+        
+        try {
+          // Execute the command and inherit stdio to show output in real-time
+          execSync(fullCommand, { 
+            stdio: 'inherit',
+            cwd: process.cwd(),
+          });
+        } catch (error: any) {
+          logger.error(`\nCommand failed with exit code ${error.status || 1}`);
+          process.exit(error.status || 1);
+        }
+      } else {
+        logger.info('\nCommand cancelled.');
+      }
+      
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('User force closed')) {
+        logger.info('\nWizard cancelled.');
+      } else {
+        logger.error('Wizard error:', error);
+      }
+      process.exit(1);
+    }
   });
 
 program.parse();
