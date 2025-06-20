@@ -136,6 +136,33 @@ program
         return;
       }
 
+      // Sort PRs by JIRA ticket number (extracted from title)
+      prs.sort((a, b) => {
+        // Extract JIRA ticket numbers from titles
+        const ticketA = a.title.match(/([A-Z]+-\d+)/)?.[1] || '';
+        const ticketB = b.title.match(/([A-Z]+-\d+)/)?.[1] || '';
+        
+        if (ticketA && ticketB) {
+          // Both have tickets - sort by project prefix first, then by number
+          const [prefixA, numA] = ticketA.split('-');
+          const [prefixB, numB] = ticketB.split('-');
+          
+          if (prefixA === prefixB) {
+            // Same project, sort by number
+            return parseInt(numA) - parseInt(numB);
+          }
+          // Different projects, sort alphabetically
+          return prefixA.localeCompare(prefixB);
+        }
+        
+        // If one has a ticket and the other doesn't, ticket comes first
+        if (ticketA && !ticketB) return -1;
+        if (!ticketA && ticketB) return 1;
+        
+        // Neither has a ticket, sort by title
+        return a.title.localeCompare(b.title);
+      });
+
       if (options.json) {
         console.log(JSON.stringify(prs, null, 2));
       } else {
