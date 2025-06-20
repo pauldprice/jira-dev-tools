@@ -50,7 +50,7 @@ usage() {
 }
 
 # Main command parsing
-COMMAND="${1:-help}"
+COMMAND="${1:-wizard}"
 shift || true
 
 # Remove the command from arguments to pass the rest to the tool

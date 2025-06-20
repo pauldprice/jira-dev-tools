@@ -4,6 +4,7 @@ import { Command } from 'commander';
 import inquirer from 'inquirer';
 import { logger } from '../utils/enhanced-logger';
 import { config } from '../utils/config';
+import { BitbucketClient } from '../utils/bitbucket-client';
 import * as path from 'path';
 import * as fs from 'fs';
 import { execSync } from 'child_process';
@@ -70,23 +71,32 @@ function buildCommand(commandId: string, answers: any): string {
       
     case 'bitbucket':
       parts.push('bitbucket', answers.subcommand);
-      if (answers.directory && answers.directory !== config.getDefaultRepoPath()) {
-        parts.push('--dir', answers.directory);
-      }
-      if (answers.state !== 'ALL') {
-        parts.push('--state', answers.state);
-      }
-      if (answers.author) {
-        parts.push('--author', answers.author);
-      }
-      if (answers.target) {
-        parts.push('--target', answers.target);
-      }
-      if (answers.limit !== '20') {
-        parts.push('--limit', answers.limit);
-      }
-      if (answers.json) {
-        parts.push('--json');
+      
+      if (answers.subcommand === 'diff-stat') {
+        parts.push(answers.prId.toString());
+        if (answers.directory && answers.directory !== config.getDefaultRepoPath()) {
+          parts.push('--dir', answers.directory);
+        }
+      } else {
+        // list-prs options
+        if (answers.directory && answers.directory !== config.getDefaultRepoPath()) {
+          parts.push('--dir', answers.directory);
+        }
+        if (answers.state !== 'ALL') {
+          parts.push('--state', answers.state);
+        }
+        if (answers.author) {
+          parts.push('--author', answers.author);
+        }
+        if (answers.target) {
+          parts.push('--target', answers.target);
+        }
+        if (answers.limit !== '20') {
+          parts.push('--limit', answers.limit);
+        }
+        if (answers.json) {
+          parts.push('--json');
+        }
       }
       break;
   }
@@ -292,7 +302,8 @@ async function promptBitbucket() {
       type: 'list',
       message: 'Bitbucket Action:',
       choices: [
-        { name: 'List Pull Requests', value: 'list-prs' }
+        { name: 'List Pull Requests', value: 'list-prs' },
+        { name: 'Show PR Diff Statistics', value: 'diff-stat' }
       ],
       default: 'list-prs',
     },
@@ -321,7 +332,95 @@ async function promptBitbucket() {
     },
   ]);
 
-  // For now, we only have list-prs
+  // Handle diff-stat subcommand
+  if (subcommand === 'diff-stat') {
+    // Get repository info to fetch PRs
+    let repoInfo;
+    try {
+      const remoteUrl = execSync('git remote get-url origin', { 
+        encoding: 'utf-8',
+        cwd: directory || config.getDefaultRepoPath()
+      }).trim();
+      
+      // Parse repo URL
+      const sshMatch = remoteUrl.match(/git@bitbucket\.org:([^\/]+)\/([^\.]+)/);
+      const httpsMatch = remoteUrl.match(/https:\/\/bitbucket\.org\/([^\/]+)\/([^\.]+)/);
+      
+      if (sshMatch) {
+        repoInfo = { workspace: sshMatch[1], repoSlug: sshMatch[2] };
+      } else if (httpsMatch) {
+        repoInfo = { workspace: httpsMatch[1], repoSlug: httpsMatch[2] };
+      }
+    } catch (error) {
+      logger.warn('Could not get repository info from git remote');
+    }
+
+    if (repoInfo) {
+      // Fetch open PRs targeting test branch
+      logger.info('Fetching open pull requests targeting test branch...');
+      const client = new BitbucketClient(repoInfo);
+      
+      try {
+        const prs = await client.listPullRequests({
+          state: 'OPEN',
+          targetBranch: 'test',
+          limit: 50
+        });
+
+        if (prs.length === 0) {
+          logger.warn('No open PRs found targeting test branch');
+          // Fall back to manual input
+          const { prId } = await inquirer.prompt([
+            {
+              name: 'prId',
+              type: 'input',
+              message: 'Enter PR ID:',
+              validate: (input: string) => {
+                const num = parseInt(input, 10);
+                return !isNaN(num) && num > 0 || 'Please enter a valid PR number';
+              },
+            },
+          ]);
+          return { subcommand, directory, prId };
+        }
+
+        // Show PR list for selection
+        const { selectedPr } = await inquirer.prompt([
+          {
+            name: 'selectedPr',
+            type: 'list',
+            message: 'Select a pull request:',
+            choices: prs.map(pr => ({
+              name: `#${pr.id} - ${pr.title} (by ${pr.author.display_name})`,
+              value: pr.id
+            })),
+            pageSize: 15
+          },
+        ]);
+
+        return { subcommand, directory, prId: selectedPr };
+      } catch (error) {
+        logger.warn('Could not fetch PRs, falling back to manual input');
+      }
+    }
+
+    // Fallback to manual PR ID input
+    const { prId } = await inquirer.prompt([
+      {
+        name: 'prId',
+        type: 'input',
+        message: 'Enter PR ID:',
+        validate: (input: string) => {
+          const num = parseInt(input, 10);
+          return !isNaN(num) && num > 0 || 'Please enter a valid PR number';
+        },
+      },
+    ]);
+
+    return { subcommand, directory, prId };
+  }
+
+  // For list-prs subcommand
   const commonAnswers = await inquirer.prompt([
     {
       name: 'state',

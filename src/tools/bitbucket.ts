@@ -179,6 +179,70 @@ program
     }
   });
 
+// Diff stat subcommand
+program
+  .command('diff-stat <pr-id>')
+  .description('Show diff statistics for a pull request')
+  .option('--repo <workspace/slug>', 'Specify repository instead of using current directory')
+  .option('-d, --dir <path>', 'Git repository directory', config.getDefaultRepoPath())
+  .action(async (prId, options) => {
+    let workspace: string;
+    let repoSlug: string;
+
+    // Get repository info
+    if (options.repo) {
+      const parts = options.repo.split('/');
+      if (parts.length !== 2) {
+        logger.error('Repository must be in format: workspace/repo-slug');
+        process.exit(1);
+      }
+      [workspace, repoSlug] = parts;
+    } else {
+      // Validate directory exists and is a git repo
+      const directory = path.resolve(options.dir);
+      if (!fs.existsSync(directory)) {
+        logger.error(`Directory does not exist: ${directory}`);
+        process.exit(1);
+      }
+      if (!fs.existsSync(path.join(directory, '.git'))) {
+        logger.error(`Not a git repository: ${directory}`);
+        process.exit(1);
+      }
+      
+      const repoInfo = getRepoInfo(directory);
+      if (!repoInfo) {
+        process.exit(1);
+      }
+      ({ workspace, repoSlug } = repoInfo);
+    }
+
+    // Create client
+    const client = new BitbucketClient({ workspace, repoSlug });
+
+    try {
+      // Parse PR ID
+      const prNumber = parseInt(prId, 10);
+      if (isNaN(prNumber)) {
+        logger.error('Invalid PR ID. Must be a number.');
+        process.exit(1);
+      }
+
+      // Get PR details first to show title
+      const pr = await client.getPullRequestDetails(prNumber);
+      if (pr) {
+        console.log(chalk.bold(`\nPull Request #${pr.id}: ${pr.title}`));
+        console.log(chalk.gray(`Author: ${pr.author.display_name} | Target: ${pr.destination.branch.name} | State: ${pr.state}\n`));
+      }
+
+      // Get and display diff stat
+      const diffStat = await client.getPullRequestDiffStat(prNumber);
+      console.log(diffStat);
+    } catch (error: any) {
+      logger.error('Failed:', error.message);
+      process.exit(1);
+    }
+  });
+
 // Show help if no command specified
 if (process.argv.length === 2) {
   program.help();

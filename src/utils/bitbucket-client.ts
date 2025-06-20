@@ -335,4 +335,104 @@ export class BitbucketClient {
       throw error; // Re-throw to let the caller handle it
     }
   }
+
+  /**
+   * Get diff stat for a pull request
+   */
+  async getPullRequestDiffStat(prId: number): Promise<string> {
+    if (!this.apiToken) {
+      throw new Error('No Bitbucket access token found');
+    }
+
+    try {
+      const url = `${this.baseUrl}/repositories/${this.workspace}/${this.repoSlug}/pullrequests/${prId}/diffstat`;
+      logger.info(`Fetching diff stat for PR #${prId}...`);
+      
+      const response = await cachedFetch.fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${this.apiToken}`,
+          'Accept': 'application/json'
+        },
+        cacheOptions: {
+          namespace: 'bitbucket',
+          ttl: 5 * 60 * 1000 // Cache for 5 minutes
+        }
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        if (response.status === 404) {
+          throw new Error(`Pull request #${prId} not found`);
+        } else if (response.status === 401) {
+          throw new Error('Authentication failed. Check BITBUCKET_ACCESS_TOKEN');
+        } else {
+          throw new Error(`Bitbucket API error: ${response.status} ${response.statusText}. Response: ${errorText}`);
+        }
+      }
+
+      const data = await response.json() as { 
+        values?: Array<{
+          status: 'added' | 'removed' | 'modified' | 'renamed';
+          lines_added: number;
+          lines_removed: number;
+          old?: { path: string };
+          new?: { path: string };
+        }>;
+        size?: number;
+      };
+
+      if (!data.values) {
+        throw new Error('Invalid response from Bitbucket API');
+      }
+
+      // Format diff stat similar to git diff --stat
+      const stats = data.values.map(file => {
+        const fileName = file.new?.path || file.old?.path || 'unknown';
+        const added = file.lines_added || 0;
+        const removed = file.lines_removed || 0;
+        const total = added + removed;
+        
+        // Create a simple visualization
+        const maxBarLength = 20;
+        const plusCount = total > 0 ? Math.ceil((added / total) * maxBarLength) : 0;
+        const minusCount = maxBarLength - plusCount;
+        
+        const bar = '+'.repeat(plusCount) + '-'.repeat(minusCount);
+        
+        return {
+          fileName,
+          added,
+          removed,
+          total,
+          bar,
+          status: file.status
+        };
+      });
+
+      // Sort by total changes descending
+      stats.sort((a, b) => b.total - a.total);
+
+      // Format output
+      let output = '';
+      let totalAdded = 0;
+      let totalRemoved = 0;
+      
+      stats.forEach(stat => {
+        const statusIndicator = stat.status === 'added' ? '[new file]' : 
+                              stat.status === 'removed' ? '[deleted]' : 
+                              stat.status === 'renamed' ? '[renamed]' : '';
+        
+        output += ` ${stat.fileName.padEnd(50)} ${statusIndicator.padEnd(10)} | ${stat.total.toString().padStart(5)} ${stat.bar}\n`;
+        totalAdded += stat.added;
+        totalRemoved += stat.removed;
+      });
+      
+      output += ` ${data.size || stats.length} files changed, ${totalAdded} insertions(+), ${totalRemoved} deletions(-)\n`;
+      
+      return output;
+    } catch (error: any) {
+      logger.error(`Failed to get diff stat: ${error.message}`);
+      throw error;
+    }
+  }
 }
