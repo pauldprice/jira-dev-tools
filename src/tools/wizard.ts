@@ -9,6 +9,7 @@ import { BitbucketClient } from '../utils/bitbucket-client';
 import * as path from 'path';
 import * as fs from 'fs';
 import { execSync } from 'child_process';
+import { formatDistanceToNow } from 'date-fns';
 
 // Register the autocomplete prompt type
 inquirer.registerPrompt('autocomplete', inquirerAutocompletePrompt);
@@ -477,8 +478,12 @@ async function promptBitbucket() {
 
         // Prepare choices for autocomplete
         const prChoices = filteredPrs.map(pr => {
+          // Calculate relative time
+          const createdAt = new Date(pr.created_on);
+          const relativeTime = formatDistanceToNow(createdAt, { addSuffix: true });
+          
           // Add approval status to the display for review-pr
-          let displayName = `#${pr.id} - ${pr.title} (by ${pr.author.display_name})`;
+          let displayName = `#${pr.id} - ${pr.title} (by ${pr.author.display_name}, ${relativeTime})`;
           if (subcommand === 'review-pr' && pr.participants && pr.participants.length > 0) {
             const reviewers = pr.participants.filter(p => p.role === 'REVIEWER');
             const approvedReviewers = reviewers.filter(p => p.approved);
