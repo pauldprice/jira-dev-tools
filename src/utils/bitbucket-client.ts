@@ -7,6 +7,7 @@ export interface BitbucketPullRequest {
   title: string;
   description?: string;
   state: 'OPEN' | 'MERGED' | 'DECLINED' | 'SUPERSEDED';
+  draft?: boolean;
   created_on: string;
   updated_on: string;
   merge_commit?: {

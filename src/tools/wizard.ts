@@ -2,12 +2,16 @@
 
 import { Command } from 'commander';
 import inquirer from 'inquirer';
+import inquirerAutocompletePrompt from 'inquirer-autocomplete-prompt';
 import { logger } from '../utils/enhanced-logger';
 import { config } from '../utils/config';
 import { BitbucketClient } from '../utils/bitbucket-client';
 import * as path from 'path';
 import * as fs from 'fs';
 import { execSync } from 'child_process';
+
+// Register the autocomplete prompt type
+inquirer.registerPrompt('autocomplete', inquirerAutocompletePrompt);
 
 const program = new Command();
 
@@ -388,10 +392,15 @@ async function promptBitbucket() {
         );
         logger.debug(`Fetched details for ${prsWithDetails.length} PRs`);
 
-        // For review-pr, filter out PRs that are fully approved
+        // For review-pr, filter out PRs that are fully approved or draft
         let filteredPrs = prsWithDetails;
         if (subcommand === 'review-pr') {
           filteredPrs = prsWithDetails.filter(pr => {
+            // Exclude draft PRs
+            if (pr.draft) {
+              return false;
+            }
+            
             if (!pr.participants || pr.participants.length === 0) {
               // No participants yet, include it
               return true;
@@ -409,7 +418,7 @@ async function promptBitbucket() {
           });
           
           if (filteredPrs.length === 0 && prsWithDetails.length > 0) {
-            logger.info(`Found ${prsWithDetails.length} open PRs but all are fully approved`);
+            logger.info(`Found ${prsWithDetails.length} open PRs but all are either draft or fully approved`);
           }
           
           // Debug: Check PR 4333 specifically
@@ -450,7 +459,7 @@ async function promptBitbucket() {
         });
 
         if (filteredPrs.length === 0) {
-          logger.warn('No open PRs found targeting test branch' + (subcommand === 'review-pr' ? ' that need review' : ''));
+          logger.warn('No open PRs found targeting test branch' + (subcommand === 'review-pr' ? ' that need review (excluding draft and fully approved PRs)' : ''));
           // Fall back to manual input
           const { prId } = await inquirer.prompt([
             {
@@ -466,33 +475,45 @@ async function promptBitbucket() {
           return { subcommand, directory, prId };
         }
 
-        // Show PR list for selection
+        // Prepare choices for autocomplete
+        const prChoices = filteredPrs.map(pr => {
+          // Add approval status to the display for review-pr
+          let displayName = `#${pr.id} - ${pr.title} (by ${pr.author.display_name})`;
+          if (subcommand === 'review-pr' && pr.participants && pr.participants.length > 0) {
+            const reviewers = pr.participants.filter(p => p.role === 'REVIEWER');
+            const approvedReviewers = reviewers.filter(p => p.approved);
+            
+            if (approvedReviewers.length > 0) {
+              // Show who has approved
+              const approverNames = approvedReviewers.map(p => p.user.display_name).join(', ');
+              displayName += ` [✓ ${approverNames}]`;
+            } else if (reviewers.length > 0) {
+              // Show reviewer count if none have approved
+              displayName += ` [${reviewers.length} reviewer${reviewers.length !== 1 ? 's' : ''}]`;
+            }
+          }
+          return {
+            name: displayName,
+            value: pr.id
+          };
+        });
+
+        // Show PR list for selection with autocomplete
         const { selectedPr } = await inquirer.prompt([
           {
             name: 'selectedPr',
-            type: 'list',
-            message: 'Select a pull request' + (subcommand === 'review-pr' ? ' to review' : '') + ':',
-            choices: filteredPrs.map(pr => {
-              // Add approval status to the display for review-pr
-              let displayName = `#${pr.id} - ${pr.title} (by ${pr.author.display_name})`;
-              if (subcommand === 'review-pr' && pr.participants && pr.participants.length > 0) {
-                const reviewers = pr.participants.filter(p => p.role === 'REVIEWER');
-                const approvedReviewers = reviewers.filter(p => p.approved);
-                
-                if (approvedReviewers.length > 0) {
-                  // Show who has approved
-                  const approverNames = approvedReviewers.map(p => p.user.display_name).join(', ');
-                  displayName += ` [✓ ${approverNames}]`;
-                } else if (reviewers.length > 0) {
-                  // Show reviewer count if none have approved
-                  displayName += ` [${reviewers.length} reviewer${reviewers.length !== 1 ? 's' : ''}]`;
-                }
+            type: 'autocomplete',
+            message: 'Select a pull request' + (subcommand === 'review-pr' ? ' to review' : '') + ' (type to search):',
+            source: async (_answers: any, input: string) => {
+              if (!input) {
+                return prChoices;
               }
-              return {
-                name: displayName,
-                value: pr.id
-              };
-            }),
+              // Filter choices based on input (case-insensitive)
+              const searchTerm = input.toLowerCase();
+              return prChoices.filter(choice => 
+                choice.name.toLowerCase().includes(searchTerm)
+              );
+            },
             pageSize: 15
           },
         ]);
@@ -646,18 +667,29 @@ program
     
     try {
       // First, ask which command to run
+      const commandChoices = [
+        { name: 'Fetch JIRA Ticket - Fetch and format JIRA ticket information', value: 'fetch-jira' },
+        { name: 'Generate Release Notes - Generate release notes from git commits and JIRA tickets', value: 'release-notes' },
+        { name: 'Analyze PDF - Analyze a PDF file using AI vision', value: 'analyze-pdf' },
+        { name: 'Bitbucket - Interact with Bitbucket repositories', value: 'bitbucket' },
+        { name: 'Cache Management - Manage the toolbox cache', value: 'cache' },
+      ];
+
       const { selectedCommand } = await inquirer.prompt([
         {
-          type: 'list',
+          type: 'autocomplete',
           name: 'selectedCommand',
-          message: 'Which command would you like to run?',
-          choices: [
-            { name: 'Fetch JIRA Ticket - Fetch and format JIRA ticket information', value: 'fetch-jira' },
-            { name: 'Generate Release Notes - Generate release notes from git commits and JIRA tickets', value: 'release-notes' },
-            { name: 'Analyze PDF - Analyze a PDF file using AI vision', value: 'analyze-pdf' },
-            { name: 'Bitbucket - Interact with Bitbucket repositories', value: 'bitbucket' },
-            { name: 'Cache Management - Manage the toolbox cache', value: 'cache' },
-          ],
+          message: 'Which command would you like to run? (type to search)',
+          source: async (_answers: any, input: string) => {
+            if (!input) {
+              return commandChoices;
+            }
+            // Filter choices based on input (case-insensitive)
+            const searchTerm = input.toLowerCase();
+            return commandChoices.filter(choice => 
+              choice.name.toLowerCase().includes(searchTerm)
+            );
+          }
         },
       ]);
       

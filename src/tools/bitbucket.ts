@@ -54,7 +54,10 @@ function formatPR(pr: any): string {
   const reviewers = pr.participants?.filter((p: any) => p.role === 'REVIEWER').length || 0;
   const approvalStatus = reviewers > 0 ? `${approvals}/${reviewers}` : '-';
   
-  return `${state} ${id} ${author} → ${target} ${created} [${approvalStatus}] ${pr.title}`;
+  // Add draft indicator if applicable
+  const draftIndicator = pr.draft ? chalk.gray(' [DRAFT]') : '';
+  
+  return `${state} ${id} ${author} → ${target} ${created} [${approvalStatus}] ${pr.title}${draftIndicator}`;
 }
 
 program
