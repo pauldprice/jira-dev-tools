@@ -27,7 +27,7 @@ export const createMockClaudeClient = (overrides?: Partial<typeof mockClaudeResp
 // Mock the entire module
 jest.mock('../../utils/claude-client', () => ({
   ClaudeClient: jest.fn().mockImplementation(() => createMockClaudeClient()),
-  createCachedClaudeClient: jest.fn().mockImplementation((apiKey, model) => {
+  createCachedClaudeClient: jest.fn().mockImplementation((apiKey) => {
     if (!apiKey && !process.env.ANTHROPIC_API_KEY) {
       return null;
     }
