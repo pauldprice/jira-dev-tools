@@ -129,9 +129,13 @@ async function promptFetchJira() {
     },
     {
       name: 'format',
-      type: 'list',
+      type: 'autocomplete',
       message: 'Output Format:',
-      choices: ['llm', 'raw'],
+      source: async (_answers: any, input: string) => {
+        const choices = ['llm', 'raw'];
+        if (!input) return choices;
+        return choices.filter(choice => choice.toLowerCase().includes(input.toLowerCase()));
+      },
       default: 'llm',
     },
     {
@@ -168,12 +172,17 @@ async function promptReleaseNotes() {
   const { generationMode } = await inquirer.prompt([
     {
       name: 'generationMode',
-      type: 'list',
-      message: 'Generation Mode:',
-      choices: [
-        { name: 'Branch comparison (test vs master)', value: 'branch' },
-        { name: 'Fix Version (all tickets with specific version)', value: 'fixVersion' },
-      ],
+      type: 'autocomplete',
+      message: 'Generation Mode: (type to search)',
+      source: async (_answers: any, input: string) => {
+        const choices = [
+          { name: 'Branch comparison (test vs master)', value: 'branch' },
+          { name: 'Fix Version (all tickets with specific version)', value: 'fixVersion' },
+        ];
+        if (!input) return choices;
+        const searchTerm = input.toLowerCase();
+        return choices.filter(choice => choice.name.toLowerCase().includes(searchTerm));
+      },
       default: 'branch',
     },
   ]);
@@ -210,14 +219,19 @@ async function promptReleaseNotes() {
   const commonAnswers = await inquirer.prompt([
     {
       name: 'aiModel',
-      type: 'list',
-      message: 'AI Model:',
-      choices: [
-        { name: 'None (no AI analysis)', value: 'none' },
-        { name: 'Claude Haiku (fast, basic)', value: 'haiku' },
-        { name: 'Claude Sonnet (balanced)', value: 'sonnet' },
-        { name: 'Claude Opus (advanced)', value: 'opus' },
-      ],
+      type: 'autocomplete',
+      message: 'AI Model: (type to search)',
+      source: async (_answers: any, input: string) => {
+        const choices = [
+          { name: 'None (no AI analysis)', value: 'none' },
+          { name: 'Claude Haiku (fast, basic)', value: 'haiku' },
+          { name: 'Claude Sonnet (balanced)', value: 'sonnet' },
+          { name: 'Claude Opus (advanced)', value: 'opus' },
+        ];
+        if (!input) return choices;
+        const searchTerm = input.toLowerCase();
+        return choices.filter(choice => choice.name.toLowerCase().includes(searchTerm));
+      },
       default: 'sonnet',
     },
     {
@@ -262,15 +276,20 @@ async function promptAnalyzePdf() {
     },
     {
       name: 'focus',
-      type: 'list',
-      message: 'Analysis Focus:',
-      choices: [
-        { name: 'All aspects', value: 'all' },
-        { name: 'Layout', value: 'layout' },
-        { name: 'Readability', value: 'readability' },
-        { name: 'Formatting', value: 'formatting' },
-        { name: 'Accessibility', value: 'accessibility' },
-      ],
+      type: 'autocomplete',
+      message: 'Analysis Focus: (type to search)',
+      source: async (_answers: any, input: string) => {
+        const choices = [
+          { name: 'All aspects', value: 'all' },
+          { name: 'Layout', value: 'layout' },
+          { name: 'Readability', value: 'readability' },
+          { name: 'Formatting', value: 'formatting' },
+          { name: 'Accessibility', value: 'accessibility' },
+        ];
+        if (!input) return choices;
+        const searchTerm = input.toLowerCase();
+        return choices.filter(choice => choice.name.toLowerCase().includes(searchTerm));
+      },
       default: 'all',
     },
     {
@@ -286,9 +305,13 @@ async function promptCache() {
   const { action } = await inquirer.prompt([
     {
       name: 'action',
-      type: 'list',
+      type: 'autocomplete',
       message: 'Action:',
-      choices: ['stats', 'clear'],
+      source: async (_answers: any, input: string) => {
+        const choices = ['stats', 'clear'];
+        if (!input) return choices;
+        return choices.filter(choice => choice.toLowerCase().includes(input.toLowerCase()));
+      },
       default: 'stats',
     },
   ]);
@@ -298,9 +321,13 @@ async function promptCache() {
     const namespaceAnswer = await inquirer.prompt([
       {
         name: 'namespace',
-        type: 'list',
-        message: 'Namespace:',
-        choices: ['all', 'jira', 'claude', 'fetch', 'bitbucket'],
+        type: 'autocomplete',
+        message: 'Namespace: (type to search)',
+        source: async (_answers: any, input: string) => {
+          const choices = ['all', 'jira', 'claude', 'fetch', 'bitbucket'];
+          if (!input) return choices;
+          return choices.filter(choice => choice.toLowerCase().includes(input.toLowerCase()));
+        },
         default: 'all',
       },
     ]);
@@ -314,13 +341,18 @@ async function promptBitbucket() {
   const { subcommand } = await inquirer.prompt([
     {
       name: 'subcommand',
-      type: 'list',
-      message: 'Bitbucket Action:',
-      choices: [
-        { name: 'List Pull Requests', value: 'list-prs' },
-        { name: 'Show PR Diff Statistics', value: 'diff-stat' },
-        { name: 'Review Pull Request (AI Code Review)', value: 'review-pr' }
-      ],
+      type: 'autocomplete',
+      message: 'Bitbucket Action: (type to search)',
+      source: async (_answers: any, input: string) => {
+        const choices = [
+          { name: 'List Pull Requests', value: 'list-prs' },
+          { name: 'Show PR Diff Statistics', value: 'diff-stat' },
+          { name: 'Review Pull Request (AI Code Review)', value: 'review-pr' }
+        ];
+        if (!input) return choices;
+        const searchTerm = input.toLowerCase();
+        return choices.filter(choice => choice.name.toLowerCase().includes(searchTerm));
+      },
       default: 'list-prs',
     },
   ]);
@@ -508,26 +540,36 @@ async function promptBitbucket() {
           const reviewOptions = await inquirer.prompt([
             {
               name: 'model',
-              type: 'list',
-              message: 'Select Claude model for review:',
-              choices: [
-                { name: 'Claude Haiku (fast, basic)', value: 'haiku' },
-                { name: 'Claude Sonnet (balanced)', value: 'sonnet' },
-                { name: 'Claude Opus (thorough)', value: 'opus' }
-              ],
+              type: 'autocomplete',
+              message: 'Select Claude model for review: (type to search)',
+              source: async (_answers: any, input: string) => {
+                const choices = [
+                  { name: 'Claude Haiku (fast, basic)', value: 'haiku' },
+                  { name: 'Claude Sonnet (balanced)', value: 'sonnet' },
+                  { name: 'Claude Opus (thorough)', value: 'opus' }
+                ];
+                if (!input) return choices;
+                const searchTerm = input.toLowerCase();
+                return choices.filter(choice => choice.name.toLowerCase().includes(searchTerm));
+              },
               default: 'sonnet'
             },
             {
               name: 'focus',
-              type: 'list',
-              message: 'Focus area (optional):',
-              choices: [
-                { name: 'No specific focus', value: '' },
-                { name: 'Security', value: 'security' },
-                { name: 'Performance', value: 'performance' },
-                { name: 'Testing', value: 'testing' },
-                { name: 'Code Quality', value: 'code-quality' }
-              ],
+              type: 'autocomplete',
+              message: 'Focus area (optional): (type to search)',
+              source: async (_answers: any, input: string) => {
+                const choices = [
+                  { name: 'No specific focus', value: '' },
+                  { name: 'Security', value: 'security' },
+                  { name: 'Performance', value: 'performance' },
+                  { name: 'Testing', value: 'testing' },
+                  { name: 'Code Quality', value: 'code-quality' }
+                ];
+                if (!input) return choices;
+                const searchTerm = input.toLowerCase();
+                return choices.filter(choice => choice.name.toLowerCase().includes(searchTerm));
+              },
               default: ''
             }
           ]);
@@ -566,26 +608,36 @@ async function promptBitbucket() {
       const reviewOptions = await inquirer.prompt([
         {
           name: 'model',
-          type: 'list',
-          message: 'Select Claude model for review:',
-          choices: [
-            { name: 'Claude Haiku (fast, basic)', value: 'haiku' },
-            { name: 'Claude Sonnet (balanced)', value: 'sonnet' },
-            { name: 'Claude Opus (thorough)', value: 'opus' }
-          ],
+          type: 'autocomplete',
+          message: 'Select Claude model for review: (type to search)',
+          source: async (_answers: any, input: string) => {
+            const choices = [
+              { name: 'Claude Haiku (fast, basic)', value: 'haiku' },
+              { name: 'Claude Sonnet (balanced)', value: 'sonnet' },
+              { name: 'Claude Opus (thorough)', value: 'opus' }
+            ];
+            if (!input) return choices;
+            const searchTerm = input.toLowerCase();
+            return choices.filter(choice => choice.name.toLowerCase().includes(searchTerm));
+          },
           default: 'sonnet'
         },
         {
           name: 'focus',
-          type: 'list',
-          message: 'Focus area (optional):',
-          choices: [
-            { name: 'No specific focus', value: '' },
-            { name: 'Security', value: 'security' },
-            { name: 'Performance', value: 'performance' },
-            { name: 'Testing', value: 'testing' },
-            { name: 'Code Quality', value: 'code-quality' }
-          ],
+          type: 'autocomplete',
+          message: 'Focus area (optional): (type to search)',
+          source: async (_answers: any, input: string) => {
+            const choices = [
+              { name: 'No specific focus', value: '' },
+              { name: 'Security', value: 'security' },
+              { name: 'Performance', value: 'performance' },
+              { name: 'Testing', value: 'testing' },
+              { name: 'Code Quality', value: 'code-quality' }
+            ];
+            if (!input) return choices;
+            const searchTerm = input.toLowerCase();
+            return choices.filter(choice => choice.name.toLowerCase().includes(searchTerm));
+          },
           default: ''
         }
       ]);
@@ -599,14 +651,19 @@ async function promptBitbucket() {
   const commonAnswers = await inquirer.prompt([
     {
       name: 'state',
-      type: 'list',
-      message: 'PR State:',
-      choices: [
-        { name: 'Open', value: 'OPEN' },
-        { name: 'Merged', value: 'MERGED' },
-        { name: 'Declined', value: 'DECLINED' },
-        { name: 'All', value: 'ALL' },
-      ],
+      type: 'autocomplete',
+      message: 'PR State: (type to search)',
+      source: async (_answers: any, input: string) => {
+        const choices = [
+          { name: 'Open', value: 'OPEN' },
+          { name: 'Merged', value: 'MERGED' },
+          { name: 'Declined', value: 'DECLINED' },
+          { name: 'All', value: 'ALL' },
+        ];
+        if (!input) return choices;
+        const searchTerm = input.toLowerCase();
+        return choices.filter(choice => choice.name.toLowerCase().includes(searchTerm));
+      },
       default: 'OPEN',
     },
     {
