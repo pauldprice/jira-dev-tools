@@ -265,7 +265,16 @@ program
 
       // Execute script
       logger.info('Executing SQL script...');
-      const results = await client.executeScript(script, { variables });
+      logger.debug(`Script path: ${script.path}`);
+      logger.debug(`Variables: ${JSON.stringify(variables)}`);
+      
+      let results;
+      try {
+        results = await client.executeScript(script, { variables });
+      } catch (execError: any) {
+        logger.debug(`Execution error: ${execError.stack || execError.message}`);
+        throw execError;
+      }
       
       // Format results
       const formatted = client.formatResults(results, outputFormat as any);
@@ -286,7 +295,14 @@ program
 
     } catch (error) {
       if (error instanceof Error) {
-        logger.error('Failed to execute SQL script:', error.message);
+        // Split error message by newlines to display properly
+        const errorLines = error.message.split('\n');
+        logger.error('Failed to execute SQL script:');
+        errorLines.forEach(line => {
+          if (line.trim()) {
+            logger.error(line);
+          }
+        });
         if (error.stack && process.env.DEBUG) {
           logger.debug(error.stack);
         }

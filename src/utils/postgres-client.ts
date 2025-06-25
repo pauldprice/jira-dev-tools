@@ -176,20 +176,35 @@ export class PostgresClient {
         // Create a map of variable info for quick lookup
         const varMap = new Map(script.variables.map(v => [v.name, v]));
         
-        // Replace variables with $1, $2, etc. for parameterized queries
+        // Create a map to track parameter indices for each variable
+        const varParamMap = new Map<string, number>();
+        
+        // First pass: assign parameter indices to each unique variable
         for (const [varName, value] of Object.entries(options.variables)) {
           const varInfo = varMap.get(varName);
           if (!varInfo) continue;
           
-          // Replace all occurrences of ${varName} or ${varName:type} with $n
-          const regex = new RegExp(`\\$\\{${varName}(?::\\w+)?\\}`, 'g');
-          processedContent = processedContent.replace(regex, () => {
-            const currentIndex = paramIndex++;
-            paramValues.push(formatValue(value, varInfo.type));
-            paramTypes[currentIndex] = varInfo.type;
-            return `$${currentIndex}`;
-          });
+          const currentIndex = paramIndex++;
+          varParamMap.set(varName, currentIndex);
+          paramValues.push(formatValue(value, varInfo.type));
+          paramTypes[currentIndex] = varInfo.type;
         }
+        
+        // Second pass: replace all occurrences with the assigned parameter index
+        for (const [varName, paramIdx] of varParamMap.entries()) {
+          const varInfo = varMap.get(varName);
+          if (!varInfo) continue;
+          
+          // Add type cast for PostgreSQL
+          const pgType = getPgTypeCast(varInfo.type);
+          const replacement = pgType ? `$${paramIdx}::${pgType}` : `$${paramIdx}`;
+          
+          const regex = new RegExp(`\\$\\{${varName}(?::\\w+)?\\}`, 'g');
+          processedContent = processedContent.replace(regex, replacement);
+        }
+        
+        logger.debug(`Processed SQL with parameters: ${processedContent}`);
+        logger.debug(`Parameter values: ${JSON.stringify(paramValues)}`);
       }
       
       // Split by semicolon but preserve semicolons within strings
@@ -215,7 +230,44 @@ export class PostgresClient {
             const result = await client.query(trimmed, stmtParams);
             results.push(result);
           } catch (queryError: any) {
-            throw new Error(`SQL query failed: ${queryError.message}\nQuery: ${trimmed.substring(0, 200)}${trimmed.length > 200 ? '...' : ''}`);
+            const errorDetails = [];
+            errorDetails.push(`SQL Error: ${queryError.message}`);
+            
+            if (queryError.code) {
+              errorDetails.push(`Error Code: ${queryError.code}`);
+            }
+            if (queryError.position) {
+              // Try to show the error position in the query
+              const pos = parseInt(queryError.position);
+              const queryLines = trimmed.split('\n');
+              let currentPos = 0;
+              let errorLine = 0;
+              let errorCol = 0;
+              
+              for (let i = 0; i < queryLines.length; i++) {
+                if (currentPos + queryLines[i].length >= pos) {
+                  errorLine = i + 1;
+                  errorCol = pos - currentPos;
+                  break;
+                }
+                currentPos += queryLines[i].length + 1; // +1 for newline
+              }
+              
+              errorDetails.push(`Position: Line ${errorLine}, Column ${errorCol}`);
+            }
+            if (queryError.detail) {
+              errorDetails.push(`Detail: ${queryError.detail}`);
+            }
+            if (queryError.hint) {
+              errorDetails.push(`Hint: ${queryError.hint}`);
+            }
+            
+            errorDetails.push(`\nQuery:\n${trimmed}`);
+            if (stmtParams.length > 0) {
+              errorDetails.push(`\nParameters: ${JSON.stringify(stmtParams)}`);
+            }
+            
+            throw new Error(errorDetails.join('\n'));
           }
         }
       }
@@ -317,6 +369,27 @@ function formatValue(value: string, type: string): any {
     case 'text':
     default:
       return value; // PostgreSQL will handle date/timestamp conversion
+  }
+}
+
+function getPgTypeCast(type: string): string | null {
+  switch (type) {
+    case 'text':
+      return 'text';
+    case 'int':
+      return 'integer';
+    case 'float':
+      return 'numeric';
+    case 'date':
+      return 'date';
+    case 'timestamp':
+      return 'timestamp';
+    case 'boolean':
+      return 'boolean';
+    case 'json':
+      return 'json';
+    default:
+      return null;
   }
 }
 
