@@ -1,5 +1,6 @@
--- Monthly summary report
+-- Monthly summary report (Example - update table names for your schema)
 -- Variables: year, month
+-- Note: This is a template. Replace 'user_sessions' with your actual table name.
 
 WITH monthly_stats AS (
     SELECT 
@@ -8,7 +9,7 @@ WITH monthly_stats AS (
         COUNT(*) as total_events,
         AVG(session_duration_seconds) as avg_session_duration
     FROM 
-        user_sessions
+        user_sessions  -- REPLACE WITH YOUR TABLE NAME
     WHERE 
         EXTRACT(YEAR FROM created_at) = ${year}
         AND EXTRACT(MONTH FROM created_at) = ${month}

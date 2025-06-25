@@ -263,7 +263,14 @@ program
       }
 
     } catch (error) {
-      logger.error('Failed to execute SQL script:', error);
+      if (error instanceof Error) {
+        logger.error('Failed to execute SQL script:', error.message);
+        if (error.stack && process.env.DEBUG) {
+          logger.debug(error.stack);
+        }
+      } else {
+        logger.error('Failed to execute SQL script:', error);
+      }
       process.exit(1);
     }
   });

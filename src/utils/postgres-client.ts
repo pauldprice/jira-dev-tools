@@ -159,6 +159,7 @@ export class PostgresClient {
 
     try {
       await client.connect();
+      logger.debug(`Connected to ${this.connection.host}:${this.connection.port}/${this.connection.database} as ${this.connection.user}`);
       
       // Replace variables in the script
       let processedContent = script.content;
@@ -177,12 +178,25 @@ export class PostgresClient {
         const trimmed = statement.trim();
         if (trimmed) {
           logger.debug(`Executing SQL: ${trimmed.substring(0, 100)}...`);
-          const result = await client.query(trimmed);
-          results.push(result);
+          try {
+            const result = await client.query(trimmed);
+            results.push(result);
+          } catch (queryError: any) {
+            throw new Error(`SQL query failed: ${queryError.message}\nQuery: ${trimmed.substring(0, 200)}${trimmed.length > 200 ? '...' : ''}`);
+          }
         }
       }
       
       return results;
+    } catch (error: any) {
+      if (error.code === 'ECONNREFUSED') {
+        throw new Error(`Cannot connect to database at ${this.connection.host}:${this.connection.port}. Is the database running?`);
+      } else if (error.code === '28P01') {
+        throw new Error(`Authentication failed for user ${this.connection.user}. Check your .pgpass file.`);
+      } else if (error.code === '3D000') {
+        throw new Error(`Database "${this.connection.database}" does not exist`);
+      }
+      throw error;
     } finally {
       await client.end();
     }
