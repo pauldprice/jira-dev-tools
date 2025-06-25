@@ -18,18 +18,137 @@ MAGENTA='\033[0;35m'
 BOLD='\033[1m'
 NC='\033[0m' # No Color
 
+# Skip environment checks if TOOLBOX_SKIP_CHECKS is set or --no-check flag is passed
+SKIP_CHECKS=${TOOLBOX_SKIP_CHECKS:-false}
+if [[ "$1" == "--no-check" ]] || [[ "$1" == "-n" ]]; then
+    SKIP_CHECKS=true
+    shift
+fi
+
+# Environment checks
+if [ "$SKIP_CHECKS" != "true" ]; then
+    echo -e "${BOLD}${BLUE}Checking environment...${NC}"
+else
+    # Still need to check if node_modules exists even with skip checks
+    if [ ! -d "$SCRIPT_DIR/node_modules" ]; then
+        echo -e "${YELLOW}Dependencies not installed. Running npm install...${NC}"
+        cd "$SCRIPT_DIR" && npm install
+    fi
+fi
+
+if [ "$SKIP_CHECKS" == "true" ]; then
+    # Skip to main execution
+    :
+else
+
+# Check Node.js version
+REQUIRED_NODE_VERSION="22.14.0"
+MIN_NODE_VERSION="16.0.0"
+
+if ! command -v node &> /dev/null; then
+    echo -e "${RED}Error: Node.js is not installed${NC}"
+    echo -e "Please install Node.js ${REQUIRED_NODE_VERSION} or higher"
+    exit 1
+fi
+
+CURRENT_NODE_VERSION=$(node -v | cut -d'v' -f2)
+
+# Function to compare versions
+version_gte() {
+    [ "$1" = "$(echo -e "$1\n$2" | sort -V | tail -n1)" ]
+}
+
+# Check if .nvmrc exists and matches current version
+if [ -f "$SCRIPT_DIR/.nvmrc" ]; then
+    NVMRC_VERSION=$(cat "$SCRIPT_DIR/.nvmrc")
+    if [ "$CURRENT_NODE_VERSION" != "$NVMRC_VERSION" ]; then
+        echo -e "${YELLOW}Warning: Node.js version mismatch${NC}"
+        echo -e "Current version: ${CURRENT_NODE_VERSION}"
+        echo -e "Required version: ${NVMRC_VERSION} (from .nvmrc)"
+        echo -e ""
+        echo -e "Please run: ${CYAN}nvm use${NC}"
+        echo -e ""
+        
+        # Check if at least meets minimum version
+        if ! version_gte "$CURRENT_NODE_VERSION" "$MIN_NODE_VERSION"; then
+            echo -e "${RED}Error: Node.js version ${CURRENT_NODE_VERSION} is below minimum required ${MIN_NODE_VERSION}${NC}"
+            exit 1
+        fi
+    fi
+elif ! version_gte "$CURRENT_NODE_VERSION" "$MIN_NODE_VERSION"; then
+    echo -e "${RED}Error: Node.js version ${CURRENT_NODE_VERSION} is below minimum required ${MIN_NODE_VERSION}${NC}"
+    echo -e "Please install Node.js ${MIN_NODE_VERSION} or higher"
+    exit 1
+fi
+
+# Check npm
+if ! command -v npm &> /dev/null; then
+    echo -e "${RED}Error: npm is not installed${NC}"
+    exit 1
+fi
+
+# Check TypeScript
+if [ ! -f "$SCRIPT_DIR/node_modules/.bin/tsc" ]; then
+    echo -e "${YELLOW}TypeScript not found in node_modules${NC}"
+fi
+
+# Check ts-node
+if [ ! -f "$SCRIPT_DIR/node_modules/.bin/ts-node" ]; then
+    echo -e "${YELLOW}ts-node not found in node_modules${NC}"
+fi
+
 # Check if node_modules exists
 if [ ! -d "$SCRIPT_DIR/node_modules" ]; then
     echo -e "${YELLOW}Dependencies not installed. Running npm install...${NC}"
     cd "$SCRIPT_DIR" && npm install
 fi
 
+# Check git (required for release-notes)
+if ! command -v git &> /dev/null; then
+    echo -e "${YELLOW}Warning: git is not installed${NC}"
+    echo -e "The release-notes command requires git to be installed"
+fi
+
+# Optional: Check for required environment variables
+check_env_vars() {
+    local missing_vars=()
+    
+    # Check for common required environment variables
+    if [ -z "$ANTHROPIC_API_KEY" ] && [ ! -f "$HOME/.toolbox/config.json" ] && [ ! -f "$HOME/.toolboxrc.json" ]; then
+        missing_vars+=("ANTHROPIC_API_KEY (for AI features)")
+    fi
+    
+    if [ ${#missing_vars[@]} -gt 0 ]; then
+        echo -e "${YELLOW}Warning: Some features may not work without these environment variables:${NC}"
+        for var in "${missing_vars[@]}"; do
+            echo -e "  - $var"
+        done
+        echo -e ""
+        echo -e "You can set these in:"
+        echo -e "  - Environment variables"
+        echo -e "  - ~/.toolbox/config.json"
+        echo -e "  - .env file in the project root"
+        echo -e ""
+    fi
+}
+
+# Run environment variable check but don't fail
+check_env_vars
+
+echo -e "${GREEN}✓ Environment checks passed${NC}"
+echo ""
+
+fi  # End of SKIP_CHECKS condition
+
 # Function to display usage
 usage() {
     echo -e "${BOLD}${BLUE}Gather Toolbox${NC}"
     echo ""
     echo -e "${BOLD}USAGE:${NC}"
-    echo "    toolbox <command> [options]"
+    echo "    toolbox [--no-check] <command> [options]"
+    echo ""
+    echo -e "${BOLD}GLOBAL OPTIONS:${NC}"
+    echo -e "    ${CYAN}--no-check, -n${NC}  Skip environment checks for faster startup"
     echo ""
     echo -e "${BOLD}COMMANDS:${NC}"
     echo -e "    ${CYAN}fetch-jira${NC}      Fetch Jira ticket details"
