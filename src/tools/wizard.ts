@@ -10,6 +10,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { execSync } from 'child_process';
 import { formatDistanceToNow } from 'date-fns';
+import { PostgresClient } from '../utils/postgres-client';
 
 // Register the autocomplete prompt type
 inquirer.registerPrompt('autocomplete', inquirerAutocompletePrompt);
@@ -112,6 +113,36 @@ function buildCommand(commandId: string, answers: any): string {
         if (answers.json) {
           parts.push('--json');
         }
+      }
+      break;
+      
+    case 'run-sql':
+      parts.push('run-sql');
+      if (answers.scriptPath) {
+        parts.push(answers.scriptPath);
+      }
+      if (answers.host) {
+        parts.push('--host', answers.host);
+      }
+      if (answers.database) {
+        parts.push('--database', answers.database);
+      }
+      if (answers.user) {
+        parts.push('--user', answers.user);
+      }
+      if (answers.port && answers.port !== '5432') {
+        parts.push('--port', answers.port);
+      }
+      if (answers.variables) {
+        for (const [key, value] of Object.entries(answers.variables)) {
+          parts.push('--var', `${key}=${value}`);
+        }
+      }
+      if (answers.format !== 'table') {
+        parts.push('--format', answers.format);
+      }
+      if (answers.outputFile) {
+        parts.push('--output', answers.outputFile);
       }
       break;
   }
@@ -699,6 +730,178 @@ async function promptBitbucket() {
   return { subcommand, directory, ...commonAnswers };
 }
 
+async function promptRunSql() {
+  const pgClient = new PostgresClient();
+  
+  // First check if there are any connections
+  const connections = await pgClient.getConnections();
+  if (connections.length === 0) {
+    logger.error('No database connections found in ~/.pgpass');
+    logger.info('Please configure your database connections in ~/.pgpass file');
+    process.exit(1);
+  }
+  
+  // Get available SQL scripts
+  const scripts = await pgClient.listScripts();
+  if (scripts.length === 0) {
+    logger.warn('No SQL scripts found in sqlscripts directory');
+    logger.info('Create .sql files in the sqlscripts directory to use this feature');
+  }
+  
+  // Select connection
+  let selectedConnection;
+  if (connections.length === 1) {
+    selectedConnection = connections[0];
+    logger.info(`Using connection: ${selectedConnection.user}@${selectedConnection.host}:${selectedConnection.port}/${selectedConnection.database}`);
+  } else {
+    const { connIndex } = await inquirer.prompt([
+      {
+        type: 'autocomplete',
+        name: 'connIndex',
+        message: 'Select database connection:',
+        source: async (_answers: any, input: string) => {
+          const choices = connections.map((conn, idx) => ({
+            name: `${conn.user}@${conn.host}:${conn.port}/${conn.database}`,
+            value: idx
+          }));
+          
+          if (!input) return choices;
+          const searchTerm = input.toLowerCase();
+          return choices.filter(choice => 
+            choice.name.toLowerCase().includes(searchTerm)
+          );
+        }
+      }
+    ]);
+    selectedConnection = connections[connIndex];
+  }
+  
+  // Select script if available
+  let scriptPath = '';
+  let variables: { [key: string]: string } = {};
+  
+  if (scripts.length > 0) {
+    const { scriptIndex } = await inquirer.prompt([
+      {
+        type: 'autocomplete',
+        name: 'scriptIndex',
+        message: 'Select SQL script:',
+        source: async (_answers: any, input: string) => {
+          const choices = scripts.map((script, idx) => {
+            const vars = script.variables.length > 0 
+              ? ` (variables: ${script.variables.join(', ')})`
+              : '';
+            return {
+              name: `${script.name}${vars}`,
+              value: idx
+            };
+          });
+          
+          if (!input) return choices;
+          const searchTerm = input.toLowerCase();
+          return choices.filter(choice => 
+            choice.name.toLowerCase().includes(searchTerm)
+          );
+        }
+      }
+    ]);
+    
+    const selectedScript = scripts[scriptIndex];
+    scriptPath = selectedScript.path;
+    
+    // Get variable values if needed
+    if (selectedScript.variables.length > 0) {
+      const defaults = await pgClient.getScriptDefaults(selectedScript.path);
+      
+      for (const varName of selectedScript.variables) {
+        const { value } = await inquirer.prompt([
+          {
+            type: 'input',
+            name: 'value',
+            message: `Enter value for ${varName}:`,
+            default: defaults[varName] || ''
+          }
+        ]);
+        variables[varName] = value;
+      }
+    }
+  } else {
+    // Ask for script path manually
+    const { manualPath } = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'manualPath',
+        message: 'Enter path to SQL script:',
+        validate: (input: string) => {
+          if (!input.trim()) return 'Script path is required';
+          if (!input.endsWith('.sql')) return 'File must be a .sql file';
+          return true;
+        }
+      }
+    ]);
+    scriptPath = manualPath;
+  }
+  
+  // Get output format
+  const { format } = await inquirer.prompt([
+    {
+      type: 'autocomplete',
+      name: 'format',
+      message: 'Output format:',
+      source: async (_answers: any, input: string) => {
+        const choices = [
+          { name: 'Table (formatted)', value: 'table' },
+          { name: 'CSV', value: 'csv' },
+          { name: 'JSON', value: 'json' }
+        ];
+        if (!input) return choices;
+        const searchTerm = input.toLowerCase();
+        return choices.filter(choice => 
+          choice.name.toLowerCase().includes(searchTerm)
+        );
+      },
+      default: 'table'
+    }
+  ]);
+  
+  // Get output file for CSV
+  let outputFile;
+  if (format === 'csv') {
+    const { useFile } = await inquirer.prompt([
+      {
+        type: 'confirm',
+        name: 'useFile',
+        message: 'Save to file?',
+        default: true
+      }
+    ]);
+    
+    if (useFile) {
+      const scriptName = path.basename(scriptPath || 'query', '.sql');
+      const { filename } = await inquirer.prompt([
+        {
+          type: 'input',
+          name: 'filename',
+          message: 'Output filename:',
+          default: `${scriptName}_${new Date().toISOString().split('T')[0]}.csv`
+        }
+      ]);
+      outputFile = filename;
+    }
+  }
+  
+  return {
+    scriptPath,
+    host: selectedConnection.host,
+    port: selectedConnection.port.toString(),
+    database: selectedConnection.database,
+    user: selectedConnection.user,
+    variables,
+    format,
+    outputFile
+  };
+}
+
 program
   .name('wizard')
   .description('Interactive CLI wizard to help build toolbox commands')
@@ -714,6 +917,7 @@ program
         { name: 'Generate Release Notes - Generate release notes from git commits and JIRA tickets', value: 'release-notes' },
         { name: 'Analyze PDF - Analyze a PDF file using AI vision', value: 'analyze-pdf' },
         { name: 'Bitbucket - Interact with Bitbucket repositories', value: 'bitbucket' },
+        { name: 'Run SQL - Execute SQL scripts with variable substitution', value: 'run-sql' },
         { name: 'Cache Management - Manage the toolbox cache', value: 'cache' },
       ];
 
@@ -754,6 +958,9 @@ program
           break;
         case 'cache':
           answers = await promptCache();
+          break;
+        case 'run-sql':
+          answers = await promptRunSql();
           break;
         default:
           logger.error('Unknown command');

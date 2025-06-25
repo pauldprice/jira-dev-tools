@@ -156,6 +156,7 @@ usage() {
     echo -e "    ${CYAN}release-notes${NC}   Generate HTML release notes from git commits"
     echo -e "    ${CYAN}analyze-pdf${NC}     Analyze PDF files using Claude's visual AI"
     echo -e "    ${CYAN}bitbucket${NC}       Interact with Bitbucket repositories"
+    echo -e "    ${CYAN}run-sql${NC}         Run SQL scripts with variable substitution"
     echo -e "    ${CYAN}cache${NC}           Manage toolbox cache"
     echo -e "    ${CYAN}wizard${NC}          Launch interactive CLI command builder"
     echo -e "    ${CYAN}help${NC}            Show this help message"
@@ -191,6 +192,9 @@ case "$COMMAND" in
         ;;
     cache)
         cd "$SCRIPT_DIR" && npx ts-node src/tools/cache-manager.ts "$@"
+        ;;
+    run-sql|sql)
+        cd "$SCRIPT_DIR" && npx ts-node src/tools/run-sql.ts "$@"
         ;;
     wizard)
         cd "$SCRIPT_DIR" && npx ts-node src/tools/wizard.ts "$@"
