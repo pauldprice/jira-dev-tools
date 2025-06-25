@@ -789,7 +789,7 @@ async function promptRunSql() {
         source: async (_answers: any, input: string) => {
           const choices = scripts.map((script, idx) => {
             const vars = script.variables.length > 0 
-              ? ` (variables: ${script.variables.join(', ')})`
+              ? ` (variables: ${script.variables.map(v => `${v.name}:${v.type}`).join(', ')})`
               : '';
             return {
               name: `${script.name}${vars}`,
@@ -813,16 +813,38 @@ async function promptRunSql() {
     if (selectedScript.variables.length > 0) {
       const defaults = await pgClient.getScriptDefaults(selectedScript.path);
       
-      for (const varName of selectedScript.variables) {
+      for (const varInfo of selectedScript.variables) {
         const { value } = await inquirer.prompt([
           {
             type: 'input',
             name: 'value',
-            message: `Enter value for ${varName}:`,
-            default: defaults[varName] || ''
+            message: `Enter value for ${varInfo.name} (${varInfo.type}):`,
+            default: defaults[varInfo.name] || '',
+            validate: (input: string) => {
+              if (!input.trim() && varInfo.type !== 'text') {
+                return `Value required for ${varInfo.type} field`;
+              }
+              if (varInfo.type === 'int' && input.trim() && isNaN(parseInt(input, 10))) {
+                return 'Must be a valid integer';
+              }
+              if (varInfo.type === 'float' && input.trim() && isNaN(parseFloat(input))) {
+                return 'Must be a valid number';
+              }
+              if (varInfo.type === 'boolean' && input.trim() && !['true', 'false', '1', '0', 't', 'f'].includes(input.toLowerCase())) {
+                return 'Must be true/false, 1/0, or t/f';
+              }
+              if (varInfo.type === 'json' && input.trim()) {
+                try {
+                  JSON.parse(input);
+                } catch {
+                  return 'Must be valid JSON';
+                }
+              }
+              return true;
+            }
           }
         ]);
-        variables[varName] = value;
+        variables[varInfo.name] = value;
       }
     }
   } else {

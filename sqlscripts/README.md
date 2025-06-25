@@ -10,7 +10,19 @@ This directory contains SQL scripts that can be executed using the `toolbox run-
 
 ## Variable Substitution
 
-Scripts can include variables using the `${variable_name}` syntax. When you run a script, you'll be prompted for values for each variable. Your responses are saved as defaults for future runs.
+Scripts can include variables using the `${variable_name}` or `${variable_name:type}` syntax. When you run a script, you'll be prompted for values for each variable. Your responses are saved as defaults for future runs.
+
+### Variable Types
+
+- `${email}` or `${email:text}` - Text (default if no type specified)
+- `${user_id:int}` - Integer
+- `${price:float}` - Floating point number
+- `${start_date:date}` - Date
+- `${created_at:timestamp}` - Timestamp
+- `${is_active:boolean}` - Boolean (true/false)
+- `${metadata:json}` - JSON object
+
+Variables are properly escaped using PostgreSQL parameterized queries to prevent SQL injection.
 
 ## Example Usage
 

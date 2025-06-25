@@ -13,11 +13,16 @@ export interface PgConnection {
   password?: string;
 }
 
+export interface SqlVariable {
+  name: string;
+  type: 'text' | 'int' | 'float' | 'date' | 'timestamp' | 'boolean' | 'json';
+}
+
 export interface SqlScript {
   name: string;
   path: string;
   content: string;
-  variables: string[];
+  variables: SqlVariable[];
 }
 
 export interface ScriptDefaults {
@@ -161,12 +166,29 @@ export class PostgresClient {
       await client.connect();
       logger.debug(`Connected to ${this.connection.host}:${this.connection.port}/${this.connection.database} as ${this.connection.user}`);
       
-      // Replace variables in the script
+      // Prepare content with placeholders for parameterized queries
       let processedContent = script.content;
-      if (options.variables) {
+      const paramValues: any[] = [];
+      const paramTypes: { [key: number]: string } = {};
+      let paramIndex = 1;
+      
+      if (options.variables && script.variables.length > 0) {
+        // Create a map of variable info for quick lookup
+        const varMap = new Map(script.variables.map(v => [v.name, v]));
+        
+        // Replace variables with $1, $2, etc. for parameterized queries
         for (const [varName, value] of Object.entries(options.variables)) {
-          const regex = new RegExp(`\\$\\{${varName}\\}`, 'g');
-          processedContent = processedContent.replace(regex, value);
+          const varInfo = varMap.get(varName);
+          if (!varInfo) continue;
+          
+          // Replace all occurrences of ${varName} or ${varName:type} with $n
+          const regex = new RegExp(`\\$\\{${varName}(?::\\w+)?\\}`, 'g');
+          processedContent = processedContent.replace(regex, () => {
+            const currentIndex = paramIndex++;
+            paramValues.push(formatValue(value, varInfo.type));
+            paramTypes[currentIndex] = varInfo.type;
+            return `$${currentIndex}`;
+          });
         }
       }
       
@@ -178,8 +200,19 @@ export class PostgresClient {
         const trimmed = statement.trim();
         if (trimmed) {
           logger.debug(`Executing SQL: ${trimmed.substring(0, 100)}...`);
+          
+          // Count how many parameters this statement uses
+          const paramMatches = trimmed.match(/\$\d+/g) || [];
+          const maxParam = paramMatches.reduce((max, match) => {
+            const num = parseInt(match.substring(1));
+            return Math.max(max, num);
+          }, 0);
+          
+          // Get the subset of parameters for this statement
+          const stmtParams = paramValues.slice(0, maxParam);
+          
           try {
-            const result = await client.query(trimmed);
+            const result = await client.query(trimmed, stmtParams);
             results.push(result);
           } catch (queryError: any) {
             throw new Error(`SQL query failed: ${queryError.message}\nQuery: ${trimmed.substring(0, 200)}${trimmed.length > 200 ? '...' : ''}`);
@@ -265,16 +298,46 @@ export class PostgresClient {
   }
 }
 
-function extractVariables(content: string): string[] {
-  const regex = /\$\{(\w+)\}/g;
-  const variables = new Set<string>();
+function formatValue(value: string, type: string): any {
+  switch (type) {
+    case 'int':
+      return parseInt(value, 10);
+    case 'float':
+      return parseFloat(value);
+    case 'boolean':
+      return value.toLowerCase() === 'true' || value === '1' || value === 't';
+    case 'json':
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value; // If invalid JSON, pass as string
+      }
+    case 'date':
+    case 'timestamp':
+    case 'text':
+    default:
+      return value; // PostgreSQL will handle date/timestamp conversion
+  }
+}
+
+function extractVariables(content: string): SqlVariable[] {
+  // Match ${name} or ${name:type}
+  const regex = /\$\{(\w+)(?::(\w+))?\}/g;
+  const variables = new Map<string, SqlVariable>();
   let match;
   
   while ((match = regex.exec(content)) !== null) {
-    variables.add(match[1]);
+    const name = match[1];
+    const type = match[2] || 'text'; // Default to text if no type specified
+    
+    // Validate type
+    const validTypes = ['text', 'int', 'float', 'date', 'timestamp', 'boolean', 'json'];
+    const normalizedType = validTypes.includes(type) ? type : 'text';
+    
+    variables.set(name, { name, type: normalizedType as any });
   }
   
-  return Array.from(variables);
+  return Array.from(variables.values());
 }
 
 function splitSqlStatements(sql: string): string[] {
