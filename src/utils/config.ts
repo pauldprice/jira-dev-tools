@@ -20,6 +20,9 @@ export interface ToolboxConfig extends JiraConfig, AnthropicConfig {
   NO_COLOR?: boolean;
   BITBUCKET_ACCESS_TOKEN?: string;
   DEFAULT_REPO_PATH?: string;
+  SLACK_API_TOKEN?: string;
+  GOOGLE_CREDENTIALS_PATH?: string;
+  GOOGLE_TOKEN_PATH?: string;
 }
 
 export class ConfigLoader {
@@ -62,6 +65,9 @@ export class ConfigLoader {
       ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
       BITBUCKET_ACCESS_TOKEN: process.env.BITBUCKET_ACCESS_TOKEN,
       DEFAULT_REPO_PATH: process.env.DEFAULT_REPO_PATH,
+      SLACK_API_TOKEN: process.env.SLACK_API_TOKEN,
+      GOOGLE_CREDENTIALS_PATH: process.env.GOOGLE_CREDENTIALS_PATH,
+      GOOGLE_TOKEN_PATH: process.env.GOOGLE_TOKEN_PATH,
       VERBOSE: process.env.VERBOSE === 'true' || 
                process.argv.includes('--verbose') || 
                process.argv.includes('-v'),
@@ -170,6 +176,15 @@ export class ConfigLoader {
             if (config.DEFAULT_REPO_PATH && !process.env.DEFAULT_REPO_PATH) {
               process.env.DEFAULT_REPO_PATH = config.DEFAULT_REPO_PATH;
             }
+            if (config.SLACK_API_TOKEN && !process.env.SLACK_API_TOKEN) {
+              process.env.SLACK_API_TOKEN = config.SLACK_API_TOKEN;
+            }
+            if (config.GOOGLE_CREDENTIALS_PATH && !process.env.GOOGLE_CREDENTIALS_PATH) {
+              process.env.GOOGLE_CREDENTIALS_PATH = config.GOOGLE_CREDENTIALS_PATH;
+            }
+            if (config.GOOGLE_TOKEN_PATH && !process.env.GOOGLE_TOKEN_PATH) {
+              process.env.GOOGLE_TOKEN_PATH = config.GOOGLE_TOKEN_PATH;
+            }
           } catch {
             // If not JSON, try key=value format
             const lines = content.split('\n');
@@ -191,6 +206,12 @@ export class ConfigLoader {
                     process.env.BITBUCKET_ACCESS_TOKEN = value;
                   } else if (key === 'DEFAULT_REPO_PATH' && !process.env.DEFAULT_REPO_PATH) {
                     process.env.DEFAULT_REPO_PATH = value;
+                  } else if (key === 'SLACK_API_TOKEN' && !process.env.SLACK_API_TOKEN) {
+                    process.env.SLACK_API_TOKEN = value;
+                  } else if (key === 'GOOGLE_CREDENTIALS_PATH' && !process.env.GOOGLE_CREDENTIALS_PATH) {
+                    process.env.GOOGLE_CREDENTIALS_PATH = value;
+                  } else if (key === 'GOOGLE_TOKEN_PATH' && !process.env.GOOGLE_TOKEN_PATH) {
+                    process.env.GOOGLE_TOKEN_PATH = value;
                   }
                 }
               }

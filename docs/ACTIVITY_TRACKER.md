@@ -47,10 +47,13 @@ The Activity Tracker tool helps you create a daily log of your work activities b
    - Download the JSON file
 5. Save the credentials:
    ```bash
+   # Create the .toolbox directory if it doesn't exist
+   mkdir -p ~/.toolbox
+   
    # Save to ~/.toolbox/google-credentials.json
    cp ~/Downloads/credentials.json ~/.toolbox/google-credentials.json
    ```
-6. On first run, you'll be prompted to authorize the app
+6. On first run, you'll be prompted to authorize the app. The token will be saved automatically.
 
 ### 3. Configuration
 
@@ -64,6 +67,8 @@ Add these to your `~/.toolbox/config.json`:
   "ANTHROPIC_API_KEY": "sk-ant-..."
 }
 ```
+
+**Note about GOOGLE_TOKEN_PATH**: This is where the OAuth token will be stored after you authorize the app. You don't need to create this file - it will be created automatically when you first authenticate. If not specified, it defaults to `~/.toolbox/google-token.json`.
 
 ## Usage
 

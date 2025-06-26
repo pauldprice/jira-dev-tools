@@ -10,6 +10,7 @@ import { CalendarActivityClient } from '../utils/activity-tracker/calendar-clien
 import { ActivityProcessor } from '../utils/activity-tracker/activity-processor';
 import { ActivityTrackerConfig, ActivityItem } from '../utils/activity-tracker/types';
 import { logger } from '../utils/enhanced-logger';
+import { config as appConfig } from '../utils/config';
 import ora from 'ora';
 
 const program = new Command();
@@ -48,9 +49,9 @@ program
 
       // Build configuration
       const config: ActivityTrackerConfig = {
-        slackToken: options.slackToken || process.env.SLACK_API_TOKEN || process.env.SLACK_API_TOKEN,
-        googleCredentialsPath: options.googleCreds,
-        googleTokenPath: options.googleToken,
+        slackToken: options.slackToken || process.env.SLACK_API_TOKEN || appConfig.get('SLACK_API_TOKEN'),
+        googleCredentialsPath: options.googleCreds || appConfig.get('GOOGLE_CREDENTIALS_PATH'),
+        googleTokenPath: options.googleToken || appConfig.get('GOOGLE_TOKEN_PATH'),
         darkPeriodThreshold: parseInt(options.darkPeriodThreshold, 10),
         workdayStart: options.workdayStart,
         workdayEnd: options.workdayEnd,
@@ -77,12 +78,11 @@ program
 
       // Initialize Google Auth if needed
       let googleAuth: GoogleAuthManager | null = null;
-      if ((options.gmail !== false || options.calendar !== false) && 
-          (config.googleCredentialsPath || process.env.GOOGLE_CREDENTIALS_PATH)) {
+      if ((options.gmail !== false || options.calendar !== false) && config.googleCredentialsPath) {
         try {
           googleAuth = new GoogleAuthManager(
-            config.googleCredentialsPath || process.env.GOOGLE_CREDENTIALS_PATH,
-            config.googleTokenPath || process.env.GOOGLE_TOKEN_PATH
+            config.googleCredentialsPath,
+            config.googleTokenPath
           );
           await googleAuth.authenticate();
         } catch (error) {
