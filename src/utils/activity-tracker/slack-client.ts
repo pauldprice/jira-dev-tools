@@ -43,20 +43,29 @@ export class SlackActivityClient {
     const activities: ActivityItem[] = [];
     
     try {
-      // Fetch conversations the user participated in
-      const conversations = await this.getActiveConversations(startOfDay, endOfDay);
+      // Try search-based approach first if available
+      const hasSearchScope = await this.checkSearchScope();
       
-      for (const conversation of conversations) {
-        const messages = await this.getConversationMessages(
-          conversation.id,
-          startOfDay.toSeconds(),
-          endOfDay.toSeconds()
-        );
+      if (hasSearchScope) {
+        logger.info('Using search API to find your messages (faster)');
+        return await this.fetchDayActivityViaSearch(startOfDay, endOfDay);
+      } else {
+        logger.info('Using channel scan method (slower, add search:read scope for better performance)');
+        // Fall back to original method
+        const conversations = await this.getActiveConversations(startOfDay, endOfDay);
         
-        if (messages.length > 0) {
-          const activity = await this.processConversation(conversation, messages);
-          if (activity) {
-            activities.push(activity);
+        for (const conversation of conversations) {
+          const messages = await this.getConversationMessages(
+            conversation.id,
+            startOfDay.toSeconds(),
+            endOfDay.toSeconds()
+          );
+          
+          if (messages.length > 0) {
+            const activity = await this.processConversation(conversation, messages);
+            if (activity) {
+              activities.push(activity);
+            }
           }
         }
       }
@@ -142,6 +151,7 @@ export class SlackActivityClient {
         logger.error('- mpim:read (to list group direct messages)');
         logger.error('- mpim:history (to read group direct messages)');
         logger.error('- users:read (to get user information)');
+        logger.error('- search:read (RECOMMENDED - to search your messages efficiently)');
         logger.error('Re-install your Slack app after adding these scopes.');
       }
     }
@@ -234,6 +244,130 @@ export class SlackActivityClient {
     }
     
     return replies;
+  }
+
+  private async checkSearchScope(): Promise<boolean> {
+    try {
+      // Try a simple search to see if we have the scope
+      await this.client.search.messages({
+        query: 'from:me',
+        count: 1
+      });
+      return true;
+    } catch (error: any) {
+      if (error.data?.error === 'missing_scope') {
+        return false;
+      }
+      // Other errors might be transient, assume we have scope
+      return true;
+    }
+  }
+
+  private async fetchDayActivityViaSearch(startDate: DateTime, endDate: DateTime): Promise<ActivityItem[]> {
+    const activities: ActivityItem[] = [];
+    const conversationMap = new Map<string, { channel: any; messages: SlackMessage[] }>();
+    
+    try {
+      // Search for all messages from the user on this day
+      const dateStr = startDate.toFormat('yyyy-MM-dd');
+      const query = `from:me on:${dateStr}`;
+      
+      logger.debug(`Searching for messages with query: ${query}`);
+      
+      let hasMore = true;
+      let page = 1;
+      
+      while (hasMore) {
+        const searchResult = await this.client.search.messages({
+          query,
+          sort: 'timestamp',
+          sort_dir: 'asc',
+          count: 100,
+          page
+        });
+        
+        if (!searchResult.messages?.matches || searchResult.messages.matches.length === 0) {
+          hasMore = false;
+          break;
+        }
+        
+        // Process search results
+        for (const match of searchResult.messages.matches) {
+          const channelId = match.channel?.id;
+          if (!channelId) continue;
+          
+          // Get or fetch channel info
+          if (!conversationMap.has(channelId)) {
+            try {
+              const channelInfo = await this.client.conversations.info({
+                channel: channelId
+              });
+              conversationMap.set(channelId, {
+                channel: channelInfo.channel,
+                messages: []
+              });
+            } catch (error) {
+              logger.debug(`Could not get info for channel ${channelId}`);
+              continue;
+            }
+          }
+          
+          // Add message to conversation
+          const conv = conversationMap.get(channelId)!;
+          const userInfo = await this.getUserInfo(match.user!);
+          
+          conv.messages.push({
+            user: userInfo?.real_name || match.user!,
+            text: match.text!,
+            timestamp: match.ts!,
+            channel: channelId,
+            thread_ts: match.thread_ts
+          });
+          
+          // Also fetch the full thread if this is part of a thread
+          if (match.thread_ts && match.thread_ts !== match.ts) {
+            const threadMessages = await this.getThreadReplies(channelId, match.thread_ts);
+            conv.messages.push(...threadMessages);
+          }
+        }
+        
+        // Check if there are more pages
+        hasMore = searchResult.messages.paging?.pages ? page < searchResult.messages.paging.pages : false;
+        page++;
+        
+        // Add delay to avoid rate limiting
+        if (hasMore) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+      
+      logger.info(`Found your messages in ${conversationMap.size} conversations via search`);
+      
+      // Now fetch full context for each conversation
+      for (const [channelId, conv] of conversationMap) {
+        // Get all messages in the conversation for this day, not just the user's
+        const allMessages = await this.getConversationMessages(
+          channelId,
+          startDate.toSeconds(),
+          endDate.toSeconds()
+        );
+        
+        if (allMessages.length > 0) {
+          const activity = await this.processConversation(conv.channel, allMessages);
+          if (activity) {
+            activities.push(activity);
+          }
+        }
+      }
+      
+      // Sort by start time
+      activities.sort((a, b) => a.startTime.toMillis() - b.startTime.toMillis());
+      
+      return activities;
+    } catch (error: any) {
+      logger.error(`Search API failed: ${error.message}`);
+      throw error;
+    }
   }
 
   private async getUserInfo(userId: string): Promise<any> {

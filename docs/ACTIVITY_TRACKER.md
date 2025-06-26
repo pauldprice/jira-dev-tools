@@ -30,6 +30,7 @@ You have two options for Slack authentication:
    - `mpim:read` - List group direct messages
    - `mpim:history` - View group direct messages
    - `users:read` - View user information
+   - `search:read` - Search for your messages (highly recommended for performance!)
 3. Install the app to your workspace
 4. Copy the "User OAuth Token" (starts with `xoxp-`)
 5. Add to your config:
