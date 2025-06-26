@@ -77,6 +77,7 @@ export class SlackActivityClient {
     
     try {
       // Get all channels user is member of
+      logger.debug(`Fetching conversations for user ${this.userId}`);
       const channelsResult = await this.client.users.conversations({
         user: this.userId,
         types: 'public_channel,private_channel,mpim,im',
@@ -113,7 +114,22 @@ export class SlackActivityClient {
       
       logger.debug(`Found ${conversations.length} channels with activity on ${startDate.toISODate()}`);
     } catch (error: any) {
-      logger.error(`Error fetching conversations: ${error.data?.error || error.message}`);
+      const errorMsg = error.data?.error || error.message;
+      logger.error(`Error fetching conversations: ${errorMsg}`);
+      
+      if (errorMsg === 'missing_scope') {
+        logger.error('Missing required Slack scopes. Make sure your token has these User Token Scopes:');
+        logger.error('- channels:read (to list channels)');
+        logger.error('- channels:history (to read public channel messages)');
+        logger.error('- groups:read (to list private channels)');
+        logger.error('- groups:history (to read private channel messages)'); 
+        logger.error('- im:read (to list direct messages)');
+        logger.error('- im:history (to read direct messages)');
+        logger.error('- mpim:read (to list group direct messages)');
+        logger.error('- mpim:history (to read group direct messages)');
+        logger.error('- users:read (to get user information)');
+        logger.error('Re-install your Slack app after adding these scopes.');
+      }
     }
     
     return conversations;

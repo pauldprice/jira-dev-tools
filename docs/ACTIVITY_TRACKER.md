@@ -21,9 +21,13 @@ You have two options for Slack authentication:
 
 1. Create a Slack app at https://api.slack.com/apps
 2. Add **User Token Scopes** (not Bot Token Scopes):
+   - `channels:read` - List channels
    - `channels:history` - View messages in public channels
+   - `groups:read` - List private channels
    - `groups:history` - View messages in private channels  
+   - `im:read` - List direct messages
    - `im:history` - View direct messages
+   - `mpim:read` - List group direct messages
    - `mpim:history` - View group direct messages
    - `users:read` - View user information
 3. Install the app to your workspace
