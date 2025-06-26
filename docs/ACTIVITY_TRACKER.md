@@ -149,6 +149,7 @@ Options:
                                        - sent-only: Only emails you sent
                                        - important: Sent + starred/important received (default)
                                        - all: All emails (including received/CC'd)
+  --slack-rate-limit                   Add delays to avoid Slack rate limiting
 ```
 
 ### Examples
@@ -230,7 +231,11 @@ toolbox track-day --dark-period-threshold 45
   - Bot tokens start with `xoxb-`
   - User tokens start with `xoxp-`
   - Make sure you're using the correct type
-- **Rate limiting**: The tool caches results to avoid hitting limits
+- **Rate limiting**: 
+  - The tool caches results to avoid hitting limits
+  - If you get "API Call failed due to rate limiting", use `--slack-rate-limit` flag
+  - Cached data persists between runs, so subsequent runs will be faster
+  - The Slack SDK will automatically retry after 60 seconds
 
 ### Google Issues
 

@@ -33,6 +33,7 @@ program
   .option('--no-llm', 'Skip LLM summarization')
   .option('--json', 'Output as JSON instead of CSV')
   .option('--email-mode <mode>', 'Email tracking mode: sent-only, all, important (default)', 'important')
+  .option('--slack-rate-limit', 'Add delays to avoid Slack rate limiting (slower but safer)')
   .action(async (options) => {
     const spinner = ora('Initializing activity tracker...').start();
 

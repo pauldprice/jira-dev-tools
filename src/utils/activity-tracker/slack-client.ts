@@ -68,12 +68,20 @@ export class SlackActivityClient {
       return activities;
     } catch (error) {
       logger.error(`Failed to fetch Slack activity: ${error}`);
-      return [];
+      throw error; // Re-throw to let the main tool handle it
     }
   }
 
   private async getActiveConversations(startDate: DateTime, endDate: DateTime): Promise<any[]> {
     const conversations: any[] = [];
+    const conversationsCacheKey = `slack-conversations:${this.userId}:${startDate.toISODate()}`;
+    
+    // Try to get cached conversation list first
+    const cachedConversations = await this.cacheManager.get(conversationsCacheKey);
+    if (cachedConversations) {
+      logger.debug('Using cached conversation list');
+      return cachedConversations as any[];
+    }
     
     try {
       // Get all channels user is member of
@@ -90,6 +98,9 @@ export class SlackActivityClient {
         for (const channel of channelsResult.channels) {
           try {
             // Check if there was activity in this time period
+            // Add a small delay to avoid rate limiting
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
             const historyResult = await this.client.conversations.history({
               channel: channel.id!,
               oldest: startDate.toSeconds().toString(),
@@ -113,6 +124,9 @@ export class SlackActivityClient {
       }
       
       logger.debug(`Found ${conversations.length} channels with activity on ${startDate.toISODate()}`);
+      
+      // Cache the conversation list to avoid re-fetching on retry
+      await this.cacheManager.set(conversationsCacheKey, conversations);
     } catch (error: any) {
       const errorMsg = error.data?.error || error.message;
       logger.error(`Error fetching conversations: ${errorMsg}`);
@@ -178,6 +192,11 @@ export class SlackActivityClient {
         }
         
         cursor = result.response_metadata?.next_cursor;
+        
+        // Add small delay between pages to avoid rate limiting
+        if (cursor) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
       } while (cursor);
     } catch (error) {
       logger.error(`Error fetching messages for channel ${channelId}: ${error}`);
