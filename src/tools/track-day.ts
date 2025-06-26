@@ -32,6 +32,7 @@ program
   .option('--no-calendar', 'Skip Calendar activity')
   .option('--no-llm', 'Skip LLM summarization')
   .option('--json', 'Output as JSON instead of CSV')
+  .option('--email-mode <mode>', 'Email tracking mode: sent-only (default), all, important', 'sent-only')
   .action(async (options) => {
     const spinner = ora('Initializing activity tracker...').start();
 
@@ -115,7 +116,7 @@ program
         try {
           const gmailClient = new GmailActivityClient(googleAuth);
           await gmailClient.initialize();
-          const gmailActivities = await gmailClient.fetchDayActivity(trackDate);
+          const gmailActivities = await gmailClient.fetchDayActivity(trackDate, options.emailMode);
           allActivities.push(...gmailActivities);
           spinner.succeed(`Found ${gmailActivities.length} emails`);
         } catch (error: any) {

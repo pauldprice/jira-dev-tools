@@ -31,7 +31,7 @@ export class GmailActivityClient {
     }
   }
 
-  async fetchDayActivity(date: DateTime): Promise<ActivityItem[]> {
+  async fetchDayActivity(date: DateTime, emailMode: string = 'sent-only'): Promise<ActivityItem[]> {
     if (!this.gmail) throw new Error('Gmail client not initialized');
 
     const startOfDay = date.startOf('day');
@@ -52,8 +52,26 @@ export class GmailActivityClient {
     const activities: ActivityItem[] = [];
 
     try {
-      // Build query for all emails involving the user (sent, received, or CC'd)
-      const query = `(from:${this.userEmail} OR to:${this.userEmail} OR cc:${this.userEmail}) after:${startOfDay.toSeconds()} before:${endOfDay.toSeconds()}`;
+      // Build query based on email mode
+      let query = '';
+      
+      switch (emailMode) {
+        case 'all':
+          // All emails involving the user
+          query = `(from:${this.userEmail} OR to:${this.userEmail} OR cc:${this.userEmail}) after:${startOfDay.toSeconds()} before:${endOfDay.toSeconds()} -in:spam -in:trash`;
+          break;
+          
+        case 'important':
+          // Sent emails + starred/important received emails
+          query = `(from:${this.userEmail} OR (to:${this.userEmail} is:important) OR (to:${this.userEmail} is:starred)) after:${startOfDay.toSeconds()} before:${endOfDay.toSeconds()} -in:spam -in:trash -in:drafts`;
+          break;
+          
+        case 'sent-only':
+        default:
+          // Only emails sent by the user (replies, forwards, new emails)
+          query = `from:${this.userEmail} after:${startOfDay.toSeconds()} before:${endOfDay.toSeconds()} -in:drafts`;
+          break;
+      }
       
       logger.debug(`Gmail query: ${query}`);
       

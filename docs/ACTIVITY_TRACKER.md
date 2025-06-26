@@ -141,6 +141,10 @@ Options:
   --no-calendar                        Skip Calendar
   --no-llm                             Skip AI summaries
   --json                               Output as JSON
+  --email-mode <mode>                  Email tracking mode:
+                                       - sent-only: Only emails you sent (default)
+                                       - important: Sent + starred/important received
+                                       - all: All emails (including received/CC'd)
 ```
 
 ### Examples
@@ -153,6 +157,16 @@ toolbox track-day --workday-start 09:00 --workday-end 17:00
 Track specific date, Slack only:
 ```bash
 toolbox track-day --date 2024-01-15 --no-gmail --no-calendar
+```
+
+Track with all emails (including received):
+```bash
+toolbox track-day --email-mode all
+```
+
+Track only important emails:
+```bash
+toolbox track-day --email-mode important
 ```
 
 Export as JSON:
