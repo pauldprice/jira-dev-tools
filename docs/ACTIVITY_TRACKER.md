@@ -142,8 +142,8 @@ Options:
   --no-llm                             Skip AI summaries
   --json                               Output as JSON
   --email-mode <mode>                  Email tracking mode:
-                                       - sent-only: Only emails you sent (default)
-                                       - important: Sent + starred/important received
+                                       - sent-only: Only emails you sent
+                                       - important: Sent + starred/important received (default)
                                        - all: All emails (including received/CC'd)
 ```
 

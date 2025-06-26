@@ -32,7 +32,7 @@ program
   .option('--no-calendar', 'Skip Calendar activity')
   .option('--no-llm', 'Skip LLM summarization')
   .option('--json', 'Output as JSON instead of CSV')
-  .option('--email-mode <mode>', 'Email tracking mode: sent-only (default), all, important', 'sent-only')
+  .option('--email-mode <mode>', 'Email tracking mode: sent-only, all, important (default)', 'important')
   .action(async (options) => {
     const spinner = ora('Initializing activity tracker...').start();
 

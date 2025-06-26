@@ -31,7 +31,7 @@ export class GmailActivityClient {
     }
   }
 
-  async fetchDayActivity(date: DateTime, emailMode: string = 'sent-only'): Promise<ActivityItem[]> {
+  async fetchDayActivity(date: DateTime, emailMode: string = 'important'): Promise<ActivityItem[]> {
     if (!this.gmail) throw new Error('Gmail client not initialized');
 
     const startOfDay = date.startOf('day');
