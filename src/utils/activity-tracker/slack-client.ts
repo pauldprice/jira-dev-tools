@@ -316,17 +316,20 @@ export class SlackActivityClient {
           const conv = conversationMap.get(channelId)!;
           const userInfo = await this.getUserInfo(match.user!);
           
+          // Note: thread_ts might exist but isn't in the type definition
+          const matchAny = match as any;
+          
           conv.messages.push({
             user: userInfo?.real_name || match.user!,
             text: match.text!,
             timestamp: match.ts!,
             channel: channelId,
-            thread_ts: match.thread_ts
+            thread_ts: matchAny.thread_ts
           });
           
           // Also fetch the full thread if this is part of a thread
-          if (match.thread_ts && match.thread_ts !== match.ts) {
-            const threadMessages = await this.getThreadReplies(channelId, match.thread_ts);
+          if (matchAny.thread_ts && matchAny.thread_ts !== match.ts) {
+            const threadMessages = await this.getThreadReplies(channelId, matchAny.thread_ts);
             conv.messages.push(...threadMessages);
           }
         }

@@ -113,7 +113,9 @@ Note: Environment variables always take precedence over config files.
 - Always test error cases and edge conditions
 - Test performance improvements by comparing before/after timings
 - Verify cached vs non-cached outputs are identical
-- **Always run the full test suite before committing code**
+- **Always run TypeScript type checking before committing code**
+- **Always test code changes before committing**
+- **Never commit without user approval after testing**
 
 ## Important Patterns
 
