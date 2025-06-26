@@ -34,6 +34,7 @@ program
   .option('--json', 'Output as JSON instead of CSV')
   .option('--email-mode <mode>', 'Email tracking mode: sent-only, all, important (default)', 'important')
   .option('--slack-rate-limit', 'Add delays to avoid Slack rate limiting (slower but safer)')
+  .option('--slack-quick', 'Quick mode - only show your messages without full context (much faster)')
   .action(async (options) => {
     const spinner = ora('Initializing activity tracker...').start();
 
@@ -68,7 +69,7 @@ program
         try {
           const slackClient = new SlackActivityClient(config.slackToken);
           await slackClient.initialize();
-          const slackActivities = await slackClient.fetchDayActivity(trackDate);
+          const slackActivities = await slackClient.fetchDayActivity(trackDate, options.slackQuick);
           allActivities.push(...slackActivities);
           if (slackActivities.length === 0) {
             const tokenType = config.slackToken.startsWith('xoxb-') ? 'bot' : 'user';

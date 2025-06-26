@@ -151,6 +151,7 @@ Options:
                                        - important: Sent + starred/important received (default)
                                        - all: All emails (including received/CC'd)
   --slack-rate-limit                   Add delays to avoid Slack rate limiting
+  --slack-quick                        Quick mode - only your messages without context (faster)
 ```
 
 ### Examples
@@ -173,6 +174,11 @@ toolbox track-day --email-mode all
 Track only important emails:
 ```bash
 toolbox track-day --email-mode important
+```
+
+Quick Slack tracking (avoid rate limits):
+```bash
+toolbox track-day --slack-quick
 ```
 
 Export as JSON:

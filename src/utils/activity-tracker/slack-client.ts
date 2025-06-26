@@ -24,7 +24,7 @@ export class SlackActivityClient {
     }
   }
 
-  async fetchDayActivity(date: DateTime): Promise<ActivityItem[]> {
+  async fetchDayActivity(date: DateTime, quickMode: boolean = false): Promise<ActivityItem[]> {
     const startOfDay = date.startOf('day');
     const endOfDay = date.endOf('day');
     
@@ -48,7 +48,7 @@ export class SlackActivityClient {
       
       if (hasSearchScope) {
         logger.info('Using search API to find your messages (faster)');
-        return await this.fetchDayActivityViaSearch(startOfDay, endOfDay);
+        return await this.fetchDayActivityViaSearch(startOfDay, endOfDay, quickMode);
       } else {
         logger.info('Using channel scan method (slower, add search:read scope for better performance)');
         // Fall back to original method
@@ -107,8 +107,8 @@ export class SlackActivityClient {
         for (const channel of channelsResult.channels) {
           try {
             // Check if there was activity in this time period
-            // Add a small delay to avoid rate limiting
-            await new Promise(resolve => setTimeout(resolve, 100));
+            // Add delay to respect rate limits (1 req/sec for history)
+            await new Promise(resolve => setTimeout(resolve, 1000));
             
             const historyResult = await this.client.conversations.history({
               channel: channel.id!,
@@ -263,7 +263,7 @@ export class SlackActivityClient {
     }
   }
 
-  private async fetchDayActivityViaSearch(startDate: DateTime, endDate: DateTime): Promise<ActivityItem[]> {
+  private async fetchDayActivityViaSearch(startDate: DateTime, endDate: DateTime, quickMode: boolean = false): Promise<ActivityItem[]> {
     const activities: ActivityItem[] = [];
     const conversationMap = new Map<string, { channel: any; messages: SlackMessage[] }>();
     
@@ -276,8 +276,9 @@ export class SlackActivityClient {
       
       let hasMore = true;
       let page = 1;
+      const maxPages = 5; // Limit to avoid rate limits
       
-      while (hasMore) {
+      while (hasMore && page <= maxPages) {
         const searchResult = await this.client.search.messages({
           query,
           sort: 'timestamp',
@@ -346,20 +347,62 @@ export class SlackActivityClient {
       
       logger.info(`Found your messages in ${conversationMap.size} conversations via search`);
       
-      // Now fetch full context for each conversation
-      for (const [channelId, conv] of conversationMap) {
-        // Get all messages in the conversation for this day, not just the user's
-        const allMessages = await this.getConversationMessages(
-          channelId,
-          startDate.toSeconds(),
-          endDate.toSeconds()
-        );
-        
-        if (allMessages.length > 0) {
-          const activity = await this.processConversation(conv.channel, allMessages);
-          if (activity) {
-            activities.push(activity);
+      // In quick mode, just process what we have from search
+      if (quickMode) {
+        logger.info('Quick mode: Processing search results without fetching full context');
+        for (const [_, conv] of conversationMap) {
+          // Process just the messages we found in search
+          if (conv.messages.length > 0) {
+            const activity = await this.processConversation(conv.channel, conv.messages);
+            if (activity) {
+              activities.push(activity);
+            }
           }
+        }
+        
+        // Sort by start time
+        activities.sort((a, b) => a.startTime.toMillis() - b.startTime.toMillis());
+        return activities;
+      }
+      
+      // Now fetch full context for each conversation
+      logger.info(`Fetching full conversation context for ${conversationMap.size} conversations...`);
+      let conversationIndex = 0;
+      
+      for (const [channelId, conv] of conversationMap) {
+        conversationIndex++;
+        logger.debug(`Fetching conversation ${conversationIndex}/${conversationMap.size}: ${conv.channel.name || channelId}`);
+        
+        // Rate limit: 1 request per second for conversations.history
+        if (conversationIndex > 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        
+        try {
+          // Get all messages in the conversation for this day, not just the user's
+          const allMessages = await this.getConversationMessages(
+            channelId,
+            startDate.toSeconds(),
+            endDate.toSeconds()
+          );
+          
+          if (allMessages.length > 0) {
+            const activity = await this.processConversation(conv.channel, allMessages);
+            if (activity) {
+              activities.push(activity);
+            }
+          }
+        } catch (error: any) {
+          if (error.data?.error === 'ratelimited') {
+            const retryAfter = parseInt(error.data?.headers?.['retry-after'] || '60');
+            logger.warn(`Rate limited on conversation ${conversationIndex}/${conversationMap.size}. Waiting ${retryAfter} seconds...`);
+            await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+            
+            // Retry this conversation
+            conversationIndex--;
+            continue;
+          }
+          throw error;
         }
       }
       
