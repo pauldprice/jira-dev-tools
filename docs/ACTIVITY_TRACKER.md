@@ -9,6 +9,7 @@ The Activity Tracker tool helps you create a daily log of your work activities b
 - **Dark period detection**: Identifies gaps in activity for focus time, breaks, etc.
 - **CSV/JSON export**: Output your daily log in spreadsheet-friendly format
 - **Configurable workday**: Set your work hours and break thresholds
+- **Email tracking**: Captures emails you sent, received, replied to, or were CC'd on
 
 ## Setup
 

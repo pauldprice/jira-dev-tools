@@ -52,14 +52,18 @@ export class GmailActivityClient {
     const activities: ActivityItem[] = [];
 
     try {
-      // Build query for emails sent or forwarded by the user
-      const query = `from:${this.userEmail} after:${startOfDay.toSeconds()} before:${endOfDay.toSeconds()}`;
+      // Build query for all emails involving the user (sent, received, or CC'd)
+      const query = `(from:${this.userEmail} OR to:${this.userEmail} OR cc:${this.userEmail}) after:${startOfDay.toSeconds()} before:${endOfDay.toSeconds()}`;
+      
+      logger.debug(`Gmail query: ${query}`);
       
       const response = await this.gmail.users.messages.list({
         userId: 'me',
         q: query,
         maxResults: 100
       });
+
+      logger.debug(`Gmail API returned ${response.data.messages?.length || 0} messages`);
 
       if (response.data.messages) {
         for (const message of response.data.messages) {
@@ -99,6 +103,7 @@ export class GmailActivityClient {
       const getHeader = (name: string) => headers.find(h => h.name?.toLowerCase() === name.toLowerCase())?.value || '';
 
       const subject = getHeader('subject');
+      const from = getHeader('from');
       const to = getHeader('to').split(',').map(e => e.trim());
       const cc = getHeader('cc').split(',').filter(e => e).map(e => e.trim());
       const dateStr = getHeader('date');
@@ -110,20 +115,34 @@ export class GmailActivityClient {
       // Extract email body
       const body = this.extractEmailBody(message.data.payload);
       
-      // Determine if this is a forwarded email
+      // Determine email type
+      const isFromMe = from.includes(this.userEmail!);
       const isForwarded = subject.toLowerCase().includes('fwd:') || body.includes('---------- Forwarded message');
+      const isReply = subject.toLowerCase().includes('re:');
+      
+      // Determine email direction and type
+      let emailType = 'Email';
+      if (isFromMe) {
+        if (isForwarded) emailType = 'Forwarded';
+        else if (isReply) emailType = 'Replied to';
+        else emailType = 'Sent';
+      } else {
+        emailType = 'Received';
+      }
       
       // Get all participants
-      const participants = [...to, ...cc].filter(email => email && email !== this.userEmail);
+      const participants = isFromMe 
+        ? [...to, ...cc].filter(email => email && email !== this.userEmail)
+        : [from, ...to, ...cc].filter(email => email && email !== this.userEmail);
 
       return {
         startTime: timestamp,
         endTime: timestamp.plus({ minutes: 5 }), // Estimate 5 minutes for email
         participants,
-        title: isForwarded ? `Forwarded: ${subject}` : `Email: ${subject}`,
+        title: `${emailType}: ${subject}`,
         summary: body.substring(0, 200) + '...', // Will be enhanced by LLM
         type: 'email',
-        rawContent: `Subject: ${subject}\n\nTo: ${to.join(', ')}\n${cc.length > 0 ? `Cc: ${cc.join(', ')}\n` : ''}\n\n${body}`
+        rawContent: `Subject: ${subject}\n\nFrom: ${from}\nTo: ${to.join(', ')}\n${cc.length > 0 ? `Cc: ${cc.join(', ')}\n` : ''}\n\n${body}`
       };
     } catch (error) {
       logger.error(`Failed to process email ${messageId}: ${error}`);
