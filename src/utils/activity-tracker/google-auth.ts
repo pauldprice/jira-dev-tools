@@ -65,6 +65,12 @@ export class GoogleAuthManager {
 
     logger.info('Authorize this app by visiting this url:');
     logger.info(authUrl);
+    logger.info('');
+    logger.info('After authorizing, you will be redirected to a URL like:');
+    logger.info('http://localhost/?code=4/0AV...&scope=...');
+    logger.info('');
+    logger.info('Copy ONLY the code value (the part after "code=" and before "&scope=")');
+    logger.info('');
     
     const rl = readline.createInterface({
       input: process.stdin,
@@ -72,9 +78,9 @@ export class GoogleAuthManager {
     });
 
     const code = await new Promise<string>((resolve) => {
-      rl.question('Enter the code from that page here: ', (code) => {
+      rl.question('Enter the authorization code here: ', (code) => {
         rl.close();
-        resolve(code);
+        resolve(code.trim());
       });
     });
 

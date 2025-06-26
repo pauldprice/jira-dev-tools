@@ -68,26 +68,32 @@ program
           await slackClient.initialize();
           const slackActivities = await slackClient.fetchDayActivity(trackDate);
           allActivities.push(...slackActivities);
-          logger.success(`Found ${slackActivities.length} Slack conversations`);
+          spinner.succeed(`Found ${slackActivities.length} Slack conversations`);
         } catch (error) {
-          logger.warn('Failed to fetch Slack activities:', error);
+          spinner.fail('Failed to fetch Slack activities');
+          logger.warn('Slack error:', error);
         }
       } else if (options.slack !== false) {
-        logger.warn('Skipping Slack: No API token provided');
+        spinner.warn('Skipping Slack: No API token provided');
       }
 
       // Initialize Google Auth if needed
       let googleAuth: GoogleAuthManager | null = null;
       if ((options.gmail !== false || options.calendar !== false) && config.googleCredentialsPath) {
+        // Stop spinner for auth process
+        spinner.stop();
+        
         try {
           googleAuth = new GoogleAuthManager(
             config.googleCredentialsPath,
             config.googleTokenPath
           );
           await googleAuth.authenticate();
+          spinner.start('Continuing activity tracking...');
         } catch (error) {
           logger.warn('Failed to authenticate with Google:', error);
           googleAuth = null;
+          spinner.start('Continuing without Google services...');
         }
       }
 

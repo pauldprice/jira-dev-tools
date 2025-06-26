@@ -78,23 +78,37 @@ export class SlackActivityClient {
         limit: 200
       });
       
+      logger.debug(`Found ${channelsResult.channels?.length || 0} total channels for user`);
+      
       if (channelsResult.channels) {
         for (const channel of channelsResult.channels) {
-          // Check if there was activity in this time period
-          const historyResult = await this.client.conversations.history({
-            channel: channel.id!,
-            oldest: startDate.toSeconds().toString(),
-            latest: endDate.toSeconds().toString(),
-            limit: 1
-          });
-          
-          if (historyResult.messages && historyResult.messages.length > 0) {
-            conversations.push(channel);
+          try {
+            // Check if there was activity in this time period
+            const historyResult = await this.client.conversations.history({
+              channel: channel.id!,
+              oldest: startDate.toSeconds().toString(),
+              latest: endDate.toSeconds().toString(),
+              limit: 1
+            });
+            
+            if (historyResult.messages && historyResult.messages.length > 0) {
+              logger.debug(`Found activity in channel: ${channel.name || channel.id}`);
+              conversations.push(channel);
+            }
+          } catch (channelError: any) {
+            // Skip channels we can't access
+            if (channelError.data?.error === 'not_in_channel') {
+              logger.debug(`Bot not in channel: ${channel.name || channel.id}`);
+            } else {
+              logger.debug(`Error checking channel ${channel.name || channel.id}:`, channelError.data?.error || channelError.message);
+            }
           }
         }
       }
-    } catch (error) {
-      logger.error('Error fetching conversations:', error);
+      
+      logger.debug(`Found ${conversations.length} channels with activity on ${startDate.toISODate()}`);
+    } catch (error: any) {
+      logger.error('Error fetching conversations:', error.data?.error || error.message);
     }
     
     return conversations;
