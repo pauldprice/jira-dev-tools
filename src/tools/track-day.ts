@@ -68,7 +68,12 @@ program
           await slackClient.initialize();
           const slackActivities = await slackClient.fetchDayActivity(trackDate);
           allActivities.push(...slackActivities);
-          spinner.succeed(`Found ${slackActivities.length} Slack conversations`);
+          if (slackActivities.length === 0) {
+            spinner.warn(`Found ${slackActivities.length} Slack conversations - Make sure the bot is added to channels`);
+            logger.info('Tip: Add your Slack bot to channels by typing /invite @YourBotName in each channel');
+          } else {
+            spinner.succeed(`Found ${slackActivities.length} Slack conversations`);
+          }
         } catch (error) {
           spinner.fail('Failed to fetch Slack activities');
           logger.warn('Slack error:', error);
@@ -91,7 +96,8 @@ program
           await googleAuth.authenticate();
           spinner.start('Continuing activity tracking...');
         } catch (error) {
-          logger.warn('Failed to authenticate with Google:', error);
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          logger.warn('Failed to authenticate with Google:', errorMessage);
           googleAuth = null;
           spinner.start('Continuing without Google services...');
         }
@@ -108,9 +114,13 @@ program
           spinner.succeed(`Found ${gmailActivities.length} emails`);
         } catch (error: any) {
           spinner.fail('Failed to fetch Gmail activities');
-          logger.warn('Gmail error:', error.message || error);
+          const errorMessage = error.message || error.response?.data?.error || JSON.stringify(error);
+          logger.warn('Gmail error:', errorMessage);
           if (error.errors) {
             logger.debug('Detailed error:', JSON.stringify(error.errors, null, 2));
+          }
+          if (error.stack && process.env.DEBUG) {
+            logger.debug('Stack trace:', error.stack);
           }
         }
       }
@@ -126,9 +136,13 @@ program
           spinner.succeed(`Found ${calendarActivities.length} calendar events`);
         } catch (error: any) {
           spinner.fail('Failed to fetch Calendar activities');
-          logger.warn('Calendar error:', error.message || error);
+          const errorMessage = error.message || error.response?.data?.error || JSON.stringify(error);
+          logger.warn('Calendar error:', errorMessage);
           if (error.errors) {
             logger.debug('Detailed error:', JSON.stringify(error.errors, null, 2));
+          }
+          if (error.stack && process.env.DEBUG) {
+            logger.debug('Stack trace:', error.stack);
           }
         }
       }
@@ -192,13 +206,17 @@ program
 
     } catch (error: any) {
       spinner.fail('Failed to track activities');
+      let errorMessage = 'Unknown error';
       if (error instanceof Error) {
-        logger.error('Error:', error.message);
-        if (error.stack && process.env.DEBUG) {
-          logger.debug('Stack trace:', error.stack);
-        }
-      } else {
-        logger.error('Error:', error);
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error && typeof error === 'object') {
+        errorMessage = error.message || error.response?.data?.error || JSON.stringify(error);
+      }
+      logger.error('Error:', errorMessage);
+      if (error?.stack && process.env.DEBUG) {
+        logger.debug('Stack trace:', error.stack);
       }
       process.exit(1);
     }

@@ -161,3 +161,4 @@ Note: Environment variables always take precedence over config files.
 ## Project Memories
 
 - remember to update the wizard whenever the command line interface is updated.
+- Do not commit code until the human has a chance to test the changes

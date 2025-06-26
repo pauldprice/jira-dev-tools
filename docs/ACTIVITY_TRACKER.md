@@ -176,7 +176,10 @@ toolbox track-day --dark-period-threshold 45
 
 ### Slack Issues
 
-- **No conversations found**: Make sure your bot is added to channels
+- **No conversations found**: This is usually because the bot hasn't been added to channels
+  - Add your bot to channels by typing `/invite @YourBotName` in each channel you want to track
+  - For direct messages, the bot needs to be part of the conversation
+  - The bot can only see messages in channels it's a member of
 - **Authentication failed**: Check your token starts with `xoxb-`
 - **Rate limiting**: The tool caches results to avoid hitting limits
 

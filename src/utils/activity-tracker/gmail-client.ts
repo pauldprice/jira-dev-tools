@@ -17,13 +17,18 @@ export class GmailActivityClient {
   }
 
   async initialize(): Promise<void> {
-    const auth = await this.authManager.authenticate();
-    this.gmail = google.gmail({ version: 'v1', auth });
-    
-    // Get user's email address
-    const profile = await this.gmail.users.getProfile({ userId: 'me' });
-    this.userEmail = profile.data.emailAddress || undefined;
-    logger.debug(`Gmail authenticated as: ${this.userEmail}`);
+    try {
+      const auth = await this.authManager.authenticate();
+      this.gmail = google.gmail({ version: 'v1', auth });
+      
+      // Get user's email address
+      const profile = await this.gmail.users.getProfile({ userId: 'me' });
+      this.userEmail = profile.data.emailAddress || undefined;
+      logger.debug(`Gmail authenticated as: ${this.userEmail}`);
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.error?.message || error.message || 'Unknown Gmail initialization error';
+      throw new Error(`Failed to initialize Gmail client: ${errorMessage}`);
+    }
   }
 
   async fetchDayActivity(date: DateTime): Promise<ActivityItem[]> {
@@ -65,9 +70,13 @@ export class GmailActivityClient {
       
       await this.cacheManager.set(cacheKey, activities);
       return activities;
-    } catch (error) {
-      logger.error('Failed to fetch Gmail activity:', error);
-      return [];
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.error?.message || error.message || 'Unknown error';
+      logger.error('Failed to fetch Gmail activity:', errorMessage);
+      if (error.response?.status === 403) {
+        logger.error('Gmail API access denied. Please check that Gmail API is enabled in Google Cloud Console.');
+      }
+      throw error; // Re-throw to let the caller handle it
     }
   }
 

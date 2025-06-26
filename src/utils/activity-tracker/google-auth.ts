@@ -67,9 +67,12 @@ export class GoogleAuthManager {
     if (!this.oauth2Client) throw new Error('OAuth2 client not initialized');
 
     // Try to use local server first
-    const code = await this.getAuthCodeViaLocalServer();
+    const { code, redirectUri } = await this.getAuthCodeViaLocalServer();
     
-    const { tokens } = await this.oauth2Client.getToken(code);
+    const { tokens } = await this.oauth2Client.getToken({
+      code,
+      redirect_uri: redirectUri
+    });
     this.oauth2Client.setCredentials(tokens);
 
     // Store the token for later use
@@ -79,14 +82,12 @@ export class GoogleAuthManager {
     logger.success('Token stored successfully');
   }
 
-  private async getAuthCodeViaLocalServer(): Promise<string> {
+  private async getAuthCodeViaLocalServer(): Promise<{ code: string; redirectUri: string }> {
     return new Promise((resolve, reject) => {
       const port = 8080;
       const redirectUri = `http://localhost:${port}`;
       
-      // Update redirect URI for local server
-      this.oauth2Client!.redirectUri = redirectUri;
-      
+      // Generate auth URL with specific redirect URI
       const authUrl = this.oauth2Client!.generateAuthUrl({
         access_type: 'offline',
         scope: SCOPES,
@@ -98,9 +99,12 @@ export class GoogleAuthManager {
         const queryObject = url.parse(req.url!, true).query;
         
         if (queryObject.code) {
-          res.writeHead(200, { 'Content-Type': 'text/html' });
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
           res.end(`
             <html>
+              <head>
+                <meta charset="utf-8">
+              </head>
               <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
                 <h1 style="color: #4CAF50;">✅ Authorization Successful!</h1>
                 <p>You can close this window and return to the terminal.</p>
@@ -110,7 +114,7 @@ export class GoogleAuthManager {
           `);
           
           server.close();
-          resolve(queryObject.code as string);
+          resolve({ code: queryObject.code as string, redirectUri });
         } else {
           res.writeHead(400, { 'Content-Type': 'text/html' });
           res.end(`
