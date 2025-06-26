@@ -69,8 +69,14 @@ program
           const slackActivities = await slackClient.fetchDayActivity(trackDate);
           allActivities.push(...slackActivities);
           if (slackActivities.length === 0) {
-            spinner.warn(`Found ${slackActivities.length} Slack conversations - Make sure the bot is added to channels`);
-            logger.info('Tip: Add your Slack bot to channels by typing /invite @YourBotName in each channel');
+            const tokenType = config.slackToken.startsWith('xoxb-') ? 'bot' : 'user';
+            spinner.warn(`Found ${slackActivities.length} Slack conversations`);
+            if (tokenType === 'bot') {
+              logger.info('Using bot token - Add your bot to channels: /invite @YourBotName');
+              logger.info('Or switch to a user token (xoxp-) to access all your channels automatically');
+            } else {
+              logger.info('Using user token - Check that you had Slack activity on this date');
+            }
           } else {
             spinner.succeed(`Found ${slackActivities.length} Slack conversations`);
           }

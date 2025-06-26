@@ -14,8 +14,34 @@ The Activity Tracker tool helps you create a daily log of your work activities b
 
 ### 1. Slack Setup
 
+You have two options for Slack authentication:
+
+#### Option A: User Token (Recommended - Access All Your Channels)
+
 1. Create a Slack app at https://api.slack.com/apps
-2. Add OAuth scopes:
+2. Add **User Token Scopes** (not Bot Token Scopes):
+   - `channels:history` - View messages in public channels
+   - `groups:history` - View messages in private channels  
+   - `im:history` - View direct messages
+   - `mpim:history` - View group direct messages
+   - `users:read` - View user information
+3. Install the app to your workspace
+4. Copy the "User OAuth Token" (starts with `xoxp-`)
+5. Add to your config:
+   ```bash
+   # In ~/.toolbox/config.json
+   {
+     "SLACK_API_TOKEN": "xoxp-your-user-token-here"
+   }
+   ```
+
+**Pros**: Automatically sees all channels you're in, no need to invite bot
+**Cons**: Acts as you, not as a separate bot
+
+#### Option B: Bot Token (Requires Adding to Each Channel)
+
+1. Create a Slack app at https://api.slack.com/apps
+2. Add **Bot Token Scopes**:
    - `channels:history` - View messages in public channels
    - `groups:history` - View messages in private channels
    - `im:history` - View direct messages
@@ -23,16 +49,17 @@ The Activity Tracker tool helps you create a daily log of your work activities b
    - `users:read` - View user information
 3. Install the app to your workspace
 4. Copy the "Bot User OAuth Token" (starts with `xoxb-`)
-5. Add to your config:
+5. Add the bot to channels with `/invite @YourBotName`
+6. Add to your config:
    ```bash
    # In ~/.toolbox/config.json
    {
-     "SLACK_API_TOKEN": "xoxb-your-token-here"
+     "SLACK_API_TOKEN": "xoxb-your-bot-token-here"
    }
-   
-   # Or as environment variable
-   export SLACK_API_TOKEN="xoxb-your-token-here"
    ```
+
+**Pros**: Separate bot identity, more secure
+**Cons**: Must manually add to each channel
 
 ### 2. Google Setup (Gmail & Calendar)
 
@@ -176,11 +203,14 @@ toolbox track-day --dark-period-threshold 45
 
 ### Slack Issues
 
-- **No conversations found**: This is usually because the bot hasn't been added to channels
-  - Add your bot to channels by typing `/invite @YourBotName` in each channel you want to track
-  - For direct messages, the bot needs to be part of the conversation
-  - The bot can only see messages in channels it's a member of
-- **Authentication failed**: Check your token starts with `xoxb-`
+- **No conversations found**: 
+  - If using a bot token (`xoxb-`): Add your bot to channels by typing `/invite @YourBotName` in each channel
+  - If using a user token (`xoxp-`): Check that you have the correct scopes and that you were active in channels on that date
+  - For both: Verify you have activity on the date you're checking
+- **Authentication failed**: 
+  - Bot tokens start with `xoxb-`
+  - User tokens start with `xoxp-`
+  - Make sure you're using the correct type
 - **Rate limiting**: The tool caches results to avoid hitting limits
 
 ### Google Issues
