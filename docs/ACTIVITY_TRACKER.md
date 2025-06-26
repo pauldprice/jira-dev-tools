@@ -185,6 +185,11 @@ toolbox track-day --dark-period-threshold 45
 
 ### Google Issues
 
+- **"Gmail API has not been used in project..."**: You need to enable the Gmail API:
+  1. Click the link in the error message or go to Google Cloud Console
+  2. Enable the Gmail API for your project
+  3. Wait a few minutes for it to propagate
+  4. Try running the command again
 - **Authentication prompt**: Normal on first run, authorize in browser
 - **No emails found**: Check you're using the correct account
 - **Token expired**: Delete `~/.toolbox/google-token.json` and re-auth
