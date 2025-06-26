@@ -32,7 +32,12 @@ export class SlackActivityClient {
     const cached = await this.cacheManager.get(cacheKey);
     if (cached) {
       logger.debug('Using cached Slack activity');
-      return cached as ActivityItem[];
+      // Restore DateTime objects from cached data
+      return (cached as any[]).map(item => ({
+        ...item,
+        startTime: DateTime.fromISO(item.startTime),
+        endTime: DateTime.fromISO(item.endTime)
+      }));
     }
 
     const activities: ActivityItem[] = [];
@@ -62,7 +67,7 @@ export class SlackActivityClient {
       await this.cacheManager.set(cacheKey, activities);
       return activities;
     } catch (error) {
-      logger.error('Failed to fetch Slack activity:', error);
+      logger.error(`Failed to fetch Slack activity: ${error}`);
       return [];
     }
   }
@@ -100,7 +105,7 @@ export class SlackActivityClient {
             if (channelError.data?.error === 'not_in_channel') {
               logger.debug(`Bot not in channel: ${channel.name || channel.id}`);
             } else {
-              logger.debug(`Error checking channel ${channel.name || channel.id}:`, channelError.data?.error || channelError.message);
+              logger.debug(`Error checking channel ${channel.name || channel.id}: ${channelError.data?.error || channelError.message}`);
             }
           }
         }
@@ -108,7 +113,7 @@ export class SlackActivityClient {
       
       logger.debug(`Found ${conversations.length} channels with activity on ${startDate.toISODate()}`);
     } catch (error: any) {
-      logger.error('Error fetching conversations:', error.data?.error || error.message);
+      logger.error(`Error fetching conversations: ${error.data?.error || error.message}`);
     }
     
     return conversations;
@@ -159,7 +164,7 @@ export class SlackActivityClient {
         cursor = result.response_metadata?.next_cursor;
       } while (cursor);
     } catch (error) {
-      logger.error(`Error fetching messages for channel ${channelId}:`, error);
+      logger.error(`Error fetching messages for channel ${channelId}: ${error}`);
     }
     
     return messages;
@@ -190,7 +195,7 @@ export class SlackActivityClient {
         }
       }
     } catch (error) {
-      logger.error(`Error fetching thread replies:`, error);
+      logger.error(`Error fetching thread replies: ${error}`);
     }
     
     return replies;

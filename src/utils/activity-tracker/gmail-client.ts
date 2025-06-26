@@ -41,7 +41,12 @@ export class GmailActivityClient {
     const cached = await this.cacheManager.get(cacheKey);
     if (cached) {
       logger.debug('Using cached Gmail activity');
-      return cached as ActivityItem[];
+      // Restore DateTime objects from cached data
+      return (cached as any[]).map(item => ({
+        ...item,
+        startTime: DateTime.fromISO(item.startTime),
+        endTime: DateTime.fromISO(item.endTime)
+      }));
     }
 
     const activities: ActivityItem[] = [];
@@ -72,7 +77,7 @@ export class GmailActivityClient {
       return activities;
     } catch (error: any) {
       const errorMessage = error.response?.data?.error?.message || error.message || 'Unknown error';
-      logger.error('Failed to fetch Gmail activity:', errorMessage);
+      logger.error(`Failed to fetch Gmail activity: ${errorMessage}`);
       if (error.response?.status === 403) {
         logger.error('Gmail API access denied. Please check that Gmail API is enabled in Google Cloud Console.');
       }
@@ -121,7 +126,7 @@ export class GmailActivityClient {
         rawContent: `Subject: ${subject}\n\nTo: ${to.join(', ')}\n${cc.length > 0 ? `Cc: ${cc.join(', ')}\n` : ''}\n\n${body}`
       };
     } catch (error) {
-      logger.error(`Failed to process email ${messageId}:`, error);
+      logger.error(`Failed to process email ${messageId}: ${error}`);
       return null;
     }
   }

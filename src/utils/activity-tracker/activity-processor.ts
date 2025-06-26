@@ -65,7 +65,7 @@ export class ActivityProcessor {
         summary: summaryMatch ? summaryMatch[1] : summary
       };
     } catch (error) {
-      logger.debug('Failed to enhance activity with LLM:', error);
+      logger.debug(`Failed to enhance activity with LLM: ${error}`);
       return activity;
     }
   }

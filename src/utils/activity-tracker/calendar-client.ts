@@ -37,7 +37,12 @@ export class CalendarActivityClient {
     const cached = await this.cacheManager.get(cacheKey);
     if (cached) {
       logger.debug('Using cached Calendar activity');
-      return cached as ActivityItem[];
+      // Restore DateTime objects from cached data
+      return (cached as any[]).map(item => ({
+        ...item,
+        startTime: DateTime.fromISO(item.startTime),
+        endTime: DateTime.fromISO(item.endTime)
+      }));
     }
 
     const activities: ActivityItem[] = [];
@@ -64,7 +69,7 @@ export class CalendarActivityClient {
       await this.cacheManager.set(cacheKey, activities);
       return activities;
     } catch (error) {
-      logger.error('Failed to fetch Calendar activity:', error);
+      logger.error(`Failed to fetch Calendar activity: ${error}`);
       return [];
     }
   }
