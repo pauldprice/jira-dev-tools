@@ -55,21 +55,25 @@ export class GmailActivityClient {
       // Build query based on email mode
       let query = '';
       
+      // Gmail expects dates in YYYY/MM/DD format, not Unix timestamps
+      const afterDate = startOfDay.toFormat('yyyy/MM/dd');
+      const beforeDate = endOfDay.plus({ days: 1 }).toFormat('yyyy/MM/dd'); // Add 1 day to be inclusive
+      
       switch (emailMode) {
         case 'all':
           // All emails involving the user
-          query = `(from:${this.userEmail} OR to:${this.userEmail} OR cc:${this.userEmail}) after:${startOfDay.toSeconds()} before:${endOfDay.toSeconds()} -in:spam -in:trash`;
+          query = `(from:${this.userEmail} OR to:${this.userEmail} OR cc:${this.userEmail}) after:${afterDate} before:${beforeDate} -in:spam -in:trash`;
           break;
           
         case 'important':
           // Sent emails + starred/important received emails
-          query = `(from:${this.userEmail} OR (to:${this.userEmail} is:important) OR (to:${this.userEmail} is:starred)) after:${startOfDay.toSeconds()} before:${endOfDay.toSeconds()} -in:spam -in:trash -in:drafts`;
+          query = `(from:${this.userEmail} OR (to:${this.userEmail} is:important) OR (to:${this.userEmail} is:starred)) after:${afterDate} before:${beforeDate} -in:spam -in:trash -in:drafts`;
           break;
           
         case 'sent-only':
         default:
           // Only emails sent by the user (replies, forwards, new emails)
-          query = `from:${this.userEmail} after:${startOfDay.toSeconds()} before:${endOfDay.toSeconds()} -in:drafts`;
+          query = `from:${this.userEmail} after:${afterDate} before:${beforeDate} -in:drafts`;
           break;
       }
       

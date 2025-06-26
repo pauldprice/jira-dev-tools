@@ -389,7 +389,7 @@ async function promptCache() {
         type: 'autocomplete',
         message: 'Namespace: (type to search)',
         source: async (_answers: any, input: string) => {
-          const choices = ['all', 'jira', 'claude', 'fetch', 'bitbucket'];
+          const choices = ['all', 'jira', 'claude', 'fetch', 'bitbucket', 'slack', 'gmail', 'calendar'];
           if (!input) return choices;
           return choices.filter(choice => choice.toLowerCase().includes(input.toLowerCase()));
         },
