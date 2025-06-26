@@ -3,7 +3,9 @@ import { OAuth2Client } from 'google-auth-library';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { logger } from '../enhanced-logger';
-import * as readline from 'readline';
+import * as http from 'http';
+import * as url from 'url';
+import { execSync } from 'child_process';
 
 const SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
@@ -26,7 +28,13 @@ export class GoogleAuthManager {
     try {
       // Load credentials
       const credentials = JSON.parse(await fs.readFile(this.credentialsPath, 'utf-8'));
-      const { client_secret, client_id, redirect_uris } = credentials.installed || credentials.web;
+      const credentialData = credentials.installed || credentials.web;
+      
+      if (!credentialData) {
+        throw new Error('Invalid credentials file format. Expected "installed" or "web" application.');
+      }
+      
+      const { client_secret, client_id, redirect_uris } = credentialData;
       
       this.oauth2Client = new google.auth.OAuth2(
         client_id,
@@ -58,32 +66,9 @@ export class GoogleAuthManager {
   private async getNewToken(): Promise<void> {
     if (!this.oauth2Client) throw new Error('OAuth2 client not initialized');
 
-    const authUrl = this.oauth2Client.generateAuthUrl({
-      access_type: 'offline',
-      scope: SCOPES,
-    });
-
-    logger.info('Authorize this app by visiting this url:');
-    logger.info(authUrl);
-    logger.info('');
-    logger.info('After authorizing, you will be redirected to a URL like:');
-    logger.info('http://localhost/?code=4/0AV...&scope=...');
-    logger.info('');
-    logger.info('Copy ONLY the code value (the part after "code=" and before "&scope=")');
-    logger.info('');
+    // Try to use local server first
+    const code = await this.getAuthCodeViaLocalServer();
     
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-
-    const code = await new Promise<string>((resolve) => {
-      rl.question('Enter the authorization code here: ', (code) => {
-        rl.close();
-        resolve(code.trim());
-      });
-    });
-
     const { tokens } = await this.oauth2Client.getToken(code);
     this.oauth2Client.setCredentials(tokens);
 
@@ -92,6 +77,78 @@ export class GoogleAuthManager {
     await fs.writeFile(this.tokenPath, JSON.stringify(tokens));
     
     logger.success('Token stored successfully');
+  }
+
+  private async getAuthCodeViaLocalServer(): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const port = 8080;
+      const redirectUri = `http://localhost:${port}`;
+      
+      // Update redirect URI for local server
+      this.oauth2Client!.redirectUri = redirectUri;
+      
+      const authUrl = this.oauth2Client!.generateAuthUrl({
+        access_type: 'offline',
+        scope: SCOPES,
+        redirect_uri: redirectUri
+      });
+
+      // Create temporary server to catch the OAuth callback
+      const server = http.createServer((req, res) => {
+        const queryObject = url.parse(req.url!, true).query;
+        
+        if (queryObject.code) {
+          res.writeHead(200, { 'Content-Type': 'text/html' });
+          res.end(`
+            <html>
+              <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+                <h1 style="color: #4CAF50;">✅ Authorization Successful!</h1>
+                <p>You can close this window and return to the terminal.</p>
+                <script>setTimeout(() => window.close(), 3000);</script>
+              </body>
+            </html>
+          `);
+          
+          server.close();
+          resolve(queryObject.code as string);
+        } else {
+          res.writeHead(400, { 'Content-Type': 'text/html' });
+          res.end(`
+            <html>
+              <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+                <h1 style="color: #f44336;">❌ Authorization Failed</h1>
+                <p>No authorization code received.</p>
+              </body>
+            </html>
+          `);
+          
+          server.close();
+          reject(new Error('No authorization code received'));
+        }
+      });
+
+      server.listen(port, () => {
+        logger.info(`Authorization server listening on http://localhost:${port}`);
+        logger.info('Opening browser for authorization...');
+        
+        // Try to open the browser automatically
+        try {
+          const openCommand = process.platform === 'darwin' ? 'open' :
+                            process.platform === 'win32' ? 'start' : 'xdg-open';
+          execSync(`${openCommand} "${authUrl}"`);
+        } catch (error) {
+          logger.info('Could not open browser automatically.');
+          logger.info('Please visit this URL manually:');
+          logger.info(authUrl);
+        }
+      });
+
+      // Timeout after 2 minutes
+      setTimeout(() => {
+        server.close();
+        reject(new Error('Authorization timeout - no response received'));
+      }, 120000);
+    });
   }
 
   getOAuth2Client(): OAuth2Client {

@@ -43,7 +43,8 @@ The Activity Tracker tool helps you create a daily log of your work activities b
    - Google Calendar API
 4. Create credentials:
    - Click "Create Credentials" → "OAuth client ID"
-   - Application type: "Desktop app"
+   - Application type: "Web application" 
+   - Add authorized redirect URI: `http://localhost:8080`
    - Download the JSON file
 5. Save the credentials:
    ```bash

@@ -105,9 +105,13 @@ program
           await gmailClient.initialize();
           const gmailActivities = await gmailClient.fetchDayActivity(trackDate);
           allActivities.push(...gmailActivities);
-          logger.success(`Found ${gmailActivities.length} emails`);
-        } catch (error) {
-          logger.warn('Failed to fetch Gmail activities:', error);
+          spinner.succeed(`Found ${gmailActivities.length} emails`);
+        } catch (error: any) {
+          spinner.fail('Failed to fetch Gmail activities');
+          logger.warn('Gmail error:', error.message || error);
+          if (error.errors) {
+            logger.debug('Detailed error:', JSON.stringify(error.errors, null, 2));
+          }
         }
       }
 
@@ -119,9 +123,13 @@ program
           await calendarClient.initialize();
           const calendarActivities = await calendarClient.fetchDayActivity(trackDate);
           allActivities.push(...calendarActivities);
-          logger.success(`Found ${calendarActivities.length} calendar events`);
-        } catch (error) {
-          logger.warn('Failed to fetch Calendar activities:', error);
+          spinner.succeed(`Found ${calendarActivities.length} calendar events`);
+        } catch (error: any) {
+          spinner.fail('Failed to fetch Calendar activities');
+          logger.warn('Calendar error:', error.message || error);
+          if (error.errors) {
+            logger.debug('Detailed error:', JSON.stringify(error.errors, null, 2));
+          }
         }
       }
 
@@ -182,9 +190,16 @@ program
         logger.info(`- Number of interactions: ${processedActivities.filter(a => a.type !== 'dark_period').length}`);
       }
 
-    } catch (error) {
+    } catch (error: any) {
       spinner.fail('Failed to track activities');
-      logger.error('Error:', error);
+      if (error instanceof Error) {
+        logger.error('Error:', error.message);
+        if (error.stack && process.env.DEBUG) {
+          logger.debug('Stack trace:', error.stack);
+        }
+      } else {
+        logger.error('Error:', error);
+      }
       process.exit(1);
     }
   });
