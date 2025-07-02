@@ -9,6 +9,7 @@ import { GmailActivityClient } from '../utils/activity-tracker/gmail-client';
 import { CalendarActivityClient } from '../utils/activity-tracker/calendar-client';
 import { ActivityProcessor } from '../utils/activity-tracker/activity-processor';
 import { ActivityTrackerConfig, ActivityItem } from '../utils/activity-tracker/types';
+import { SimpleTerminalVisualizer } from '../utils/activity-tracker/simple-terminal-visualizer';
 import { logger } from '../utils/enhanced-logger';
 import { config as appConfig } from '../utils/config';
 import ora from 'ora';
@@ -35,6 +36,8 @@ program
   .option('--email-mode <mode>', 'Email tracking mode: sent-only, all, important (default)', 'important')
   .option('--slack-rate-limit', 'Add delays to avoid Slack rate limiting (slower but safer)')
   .option('--slack-quick', 'Quick mode - only show your messages without full context (much faster)')
+  .option('--slack-context <minutes>', 'Minutes of context to fetch around your messages (default: 5)', '5')
+  .option('--visualize', 'Show terminal timeline visualization')
   .action(async (options) => {
     const spinner = ora('Initializing activity tracker...').start();
 
@@ -69,7 +72,11 @@ program
         try {
           const slackClient = new SlackActivityClient(config.slackToken);
           await slackClient.initialize();
-          const slackActivities = await slackClient.fetchDayActivity(trackDate, options.slackQuick);
+          const slackActivities = await slackClient.fetchDayActivity(
+            trackDate, 
+            options.slackQuick,
+            parseInt(options.slackContext, 10)
+          );
           allActivities.push(...slackActivities);
           if (slackActivities.length === 0) {
             const tokenType = config.slackToken.startsWith('xoxb-') ? 'bot' : 'user';
@@ -180,6 +187,12 @@ program
         : await processor.processActivities(allActivities); // Process with dark periods regardless
 
       spinner.succeed(`Processed ${processedActivities.length} total activities`);
+
+      // Show visualization if requested
+      if (options.visualize) {
+        const visualizer = new SimpleTerminalVisualizer();
+        console.log('\n' + visualizer.visualizeDay(processedActivities, trackDate));
+      }
 
       // Output results
       const outputFile = options.output || `activity_${trackDate.toISODate()}.csv`;

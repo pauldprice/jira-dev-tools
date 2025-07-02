@@ -24,7 +24,7 @@ export class SlackActivityClient {
     }
   }
 
-  async fetchDayActivity(date: DateTime, quickMode: boolean = false): Promise<ActivityItem[]> {
+  async fetchDayActivity(date: DateTime, quickMode: boolean = false, contextMinutes: number = 5): Promise<ActivityItem[]> {
     const startOfDay = date.startOf('day');
     const endOfDay = date.endOf('day');
     
@@ -48,7 +48,7 @@ export class SlackActivityClient {
       
       if (hasSearchScope) {
         logger.info('Using search API to find your messages (faster)');
-        return await this.fetchDayActivityViaSearch(startOfDay, endOfDay, quickMode);
+        return await this.fetchDayActivityViaSearch(startOfDay, endOfDay, quickMode, contextMinutes);
       } else {
         logger.info('Using channel scan method (slower, add search:read scope for better performance)');
         // Fall back to original method
@@ -263,7 +263,7 @@ export class SlackActivityClient {
     }
   }
 
-  private async fetchDayActivityViaSearch(startDate: DateTime, endDate: DateTime, quickMode: boolean = false): Promise<ActivityItem[]> {
+  private async fetchDayActivityViaSearch(startDate: DateTime, endDate: DateTime, quickMode: boolean = false, contextMinutes: number = 5): Promise<ActivityItem[]> {
     const activities: ActivityItem[] = [];
     const conversationMap = new Map<string, { channel: any; messages: SlackMessage[] }>();
     
@@ -365,8 +365,8 @@ export class SlackActivityClient {
         return activities;
       }
       
-      // Now fetch full context for each conversation
-      logger.info(`Fetching full conversation context for ${conversationMap.size} conversations...`);
+      // Now fetch limited context for each conversation
+      logger.info(`Fetching ${contextMinutes}-minute context window for ${conversationMap.size} conversations...`);
       let conversationIndex = 0;
       
       for (const [channelId, conv] of conversationMap) {
@@ -379,11 +379,13 @@ export class SlackActivityClient {
         }
         
         try {
-          // Get all messages in the conversation for this day, not just the user's
-          const allMessages = await this.getConversationMessages(
+          // Instead of fetching ALL messages for the day, fetch context around user's messages
+          const allMessages = await this.getConversationContext(
             channelId,
-            startDate.toSeconds(),
-            endDate.toSeconds()
+            conv.messages,
+            startDate,
+            endDate,
+            contextMinutes
           );
           
           if (allMessages.length > 0) {
@@ -414,6 +416,90 @@ export class SlackActivityClient {
       logger.error(`Search API failed: ${error.message}`);
       throw error;
     }
+  }
+
+  private async getConversationContext(
+    channelId: string,
+    userMessages: SlackMessage[],
+    startDate: DateTime,
+    endDate: DateTime,
+    contextMinutes: number = 5
+  ): Promise<SlackMessage[]> {
+    const contextMessages: SlackMessage[] = [];
+    const contextSeconds = contextMinutes * 60;
+    
+    // Group user messages by thread to avoid duplicate fetches
+    const threads = new Map<string, SlackMessage[]>();
+    const standaloneMessages: SlackMessage[] = [];
+    
+    userMessages.forEach(msg => {
+      if (msg.thread_ts) {
+        const thread = threads.get(msg.thread_ts) || [];
+        thread.push(msg);
+        threads.set(msg.thread_ts, thread);
+      } else {
+        standaloneMessages.push(msg);
+      }
+    });
+    
+    // Fetch context for standalone messages
+    if (standaloneMessages.length > 0) {
+      try {
+        // Get a small window around the first and last user message
+        const firstMsg = standaloneMessages[0];
+        const lastMsg = standaloneMessages[standaloneMessages.length - 1];
+        
+        const oldest = Math.max(
+          parseFloat(firstMsg.timestamp) - contextSeconds,
+          startDate.toSeconds()
+        );
+        const latest = Math.min(
+          parseFloat(lastMsg.timestamp) + contextSeconds,
+          endDate.toSeconds()
+        );
+        
+        const result = await this.client.conversations.history({
+          channel: channelId,
+          oldest: oldest.toString(),
+          latest: latest.toString(),
+          limit: 100 // Reasonable limit
+        });
+        
+        if (result.messages) {
+          for (const msg of result.messages) {
+            if (msg.type === 'message' && msg.user && msg.text) {
+              const userInfo = await this.getUserInfo(msg.user);
+              contextMessages.push({
+                user: userInfo?.real_name || msg.user,
+                text: msg.text,
+                timestamp: msg.ts!,
+                channel: channelId,
+                thread_ts: msg.thread_ts
+              });
+            }
+          }
+        }
+      } catch (error) {
+        logger.debug(`Error fetching context for channel ${channelId}: ${error}`);
+      }
+    }
+    
+    // Fetch full threads for messages in threads
+    for (const [threadTs, _] of threads) {
+      try {
+        const replies = await this.getThreadReplies(channelId, threadTs);
+        contextMessages.push(...replies);
+      } catch (error) {
+        logger.debug(`Error fetching thread ${threadTs}: ${error}`);
+      }
+    }
+    
+    // Remove duplicates and sort
+    const uniqueMessages = Array.from(
+      new Map(contextMessages.map(m => [`${m.timestamp}-${m.user}`, m])).values()
+    );
+    
+    return uniqueMessages.sort((a, b) => parseFloat(a.timestamp) - parseFloat(b.timestamp));
   }
 
   private async getUserInfo(userId: string): Promise<any> {
