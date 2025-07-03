@@ -18,6 +18,16 @@ inquirer.registerPrompt('autocomplete', inquirerAutocompletePrompt);
 
 const program = new Command();
 
+// Escape shell arguments
+function escapeShellArg(arg: string): string {
+  // If the argument contains special characters, wrap it in single quotes
+  // and escape any single quotes within it
+  if (/[^A-Za-z0-9_\-./]/.test(arg)) {
+    return "'" + arg.replace(/'/g, "'\\''") + "'";
+  }
+  return arg;
+}
+
 // Build command from answers
 function buildCommand(commandId: string, answers: any): string {
   const parts = ['./toolbox'];
@@ -35,16 +45,16 @@ function buildCommand(commandId: string, answers: any): string {
       
     case 'release-notes':
       parts.push('release-notes');
-      parts.push('--repo', answers.repo);
+      parts.push('--repo', escapeShellArg(answers.repo));
       
       if (answers.generationMode === 'fixVersion') {
-        parts.push('--fix-version', answers.fixVersion);
+        parts.push('--fix-version', escapeShellArg(answers.fixVersion));
       } else {
         if (answers.source !== 'origin/test') {
-          parts.push('--source', answers.source);
+          parts.push('--source', escapeShellArg(answers.source));
         }
         if (answers.target !== 'origin/master') {
-          parts.push('--target', answers.target);
+          parts.push('--target', escapeShellArg(answers.target));
         }
       }
       
@@ -60,7 +70,7 @@ function buildCommand(commandId: string, answers: any): string {
       break;
       
     case 'analyze-pdf':
-      parts.push('analyze-pdf', answers.file);
+      parts.push('analyze-pdf', escapeShellArg(answers.file));
       if (answers.focus !== 'all') {
         parts.push('--focus', answers.focus);
       }
@@ -83,7 +93,7 @@ function buildCommand(commandId: string, answers: any): string {
         // prId could be a number or a JIRA ticket string
         parts.push(answers.prId.toString());
         if (answers.directory && answers.directory !== config.getDefaultRepoPath()) {
-          parts.push('--dir', answers.directory);
+          parts.push('--dir', escapeShellArg(answers.directory));
         }
         // Add review-pr specific options
         if (answers.subcommand === 'review-pr') {
@@ -97,16 +107,16 @@ function buildCommand(commandId: string, answers: any): string {
       } else {
         // list-prs options
         if (answers.directory && answers.directory !== config.getDefaultRepoPath()) {
-          parts.push('--dir', answers.directory);
+          parts.push('--dir', escapeShellArg(answers.directory));
         }
         if (answers.state !== 'ALL') {
           parts.push('--state', answers.state);
         }
         if (answers.author) {
-          parts.push('--author', answers.author);
+          parts.push('--author', escapeShellArg(answers.author));
         }
         if (answers.target) {
-          parts.push('--target', answers.target);
+          parts.push('--target', escapeShellArg(answers.target));
         }
         if (answers.limit !== '20') {
           parts.push('--limit', answers.limit);
@@ -120,30 +130,30 @@ function buildCommand(commandId: string, answers: any): string {
     case 'run-sql':
       parts.push('run-sql');
       if (answers.scriptPath) {
-        parts.push(answers.scriptPath);
+        parts.push(escapeShellArg(answers.scriptPath));
       }
       if (answers.host) {
-        parts.push('--host', answers.host);
+        parts.push('--host', escapeShellArg(answers.host));
       }
       if (answers.database) {
-        parts.push('--database', answers.database);
+        parts.push('--database', escapeShellArg(answers.database));
       }
       if (answers.user) {
-        parts.push('--user', answers.user);
+        parts.push('--user', escapeShellArg(answers.user));
       }
       if (answers.port && answers.port !== '5432') {
         parts.push('--port', answers.port);
       }
       if (answers.variables) {
         for (const [key, value] of Object.entries(answers.variables)) {
-          parts.push('--var', `${key}=${value}`);
+          parts.push('--var', escapeShellArg(`${key}=${value}`));
         }
       }
       if (answers.format !== 'table') {
         parts.push('--format', answers.format);
       }
       if (answers.outputFile) {
-        parts.push('--output', answers.outputFile);
+        parts.push('--output', escapeShellArg(answers.outputFile));
       }
       break;
       
@@ -167,7 +177,7 @@ function buildCommand(commandId: string, answers: any): string {
       if (answers.outputFormat === 'json') {
         parts.push('--json');
       } else if (answers.outputFile) {
-        parts.push('--output', answers.outputFile);
+        parts.push('--output', escapeShellArg(answers.outputFile));
       }
       if (answers.workdayStart !== '08:00') {
         parts.push('--workday-start', answers.workdayStart);
@@ -177,6 +187,45 @@ function buildCommand(commandId: string, answers: any): string {
       }
       if (answers.darkPeriodThreshold !== '30') {
         parts.push('--dark-period-threshold', answers.darkPeriodThreshold);
+      }
+      break;
+      
+    case 'search-email':
+      parts.push('search-email');
+      parts.push('--email', escapeShellArg(answers.email));
+      parts.push('--query', escapeShellArg(answers.query));
+      
+      if (answers.days) {
+        parts.push('--days', answers.days);
+      } else {
+        if (answers.startDate) {
+          parts.push('--start-date', answers.startDate);
+        }
+        if (answers.endDate) {
+          parts.push('--end-date', answers.endDate);
+        }
+      }
+      
+      if (answers.subject) {
+        parts.push('--subject', escapeShellArg(answers.subject));
+      }
+      if (answers.body) {
+        parts.push('--body', escapeShellArg(answers.body));
+      }
+      if (answers.limit !== '50') {
+        parts.push('--limit', answers.limit);
+      }
+      if (answers.includeAttachments) {
+        parts.push('--include-attachments');
+      }
+      if (answers.model !== 'haiku') {
+        parts.push('--model', answers.model);
+      }
+      if (answers.showReferences) {
+        parts.push('--show-references');
+      }
+      if (answers.export) {
+        parts.push('--export', escapeShellArg(answers.export));
       }
       break;
   }
@@ -1116,6 +1165,212 @@ async function promptTrackDay() {
   };
 }
 
+async function promptSearchEmail() {
+  // Get email address
+  const { email, query } = await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'email',
+      message: 'Email address to search for (to/from):',
+      validate: (input: string) => {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return emailRegex.test(input) || 'Please enter a valid email address';
+      }
+    },
+    {
+      type: 'input',
+      name: 'query',
+      message: 'What would you like to know? (natural language query):',
+      validate: (input: string) => input.trim().length > 0 || 'Query is required'
+    }
+  ]);
+
+  // Ask about date range
+  const { dateOption } = await inquirer.prompt([
+    {
+      type: 'autocomplete',
+      name: 'dateOption',
+      message: 'Date range:',
+      source: async (_answers: any, input: string) => {
+        const choices = [
+          { name: 'All emails', value: 'all' },
+          { name: 'Last 7 days', value: '7' },
+          { name: 'Last 30 days', value: '30' },
+          { name: 'Last 90 days', value: '90' },
+          { name: 'Custom date range', value: 'custom' }
+        ];
+        if (!input) return choices;
+        const searchTerm = input.toLowerCase();
+        return choices.filter(choice => 
+          choice.name.toLowerCase().includes(searchTerm)
+        );
+      },
+      default: '30'
+    }
+  ]);
+
+  let days, startDate, endDate;
+  if (dateOption === 'custom') {
+    const dateRange = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'startDate',
+        message: 'Start date (YYYY-MM-DD):',
+        validate: (input: string) => {
+          if (!input) return true; // Optional
+          const dt = DateTime.fromISO(input);
+          return dt.isValid || 'Please enter a valid date in YYYY-MM-DD format';
+        }
+      },
+      {
+        type: 'input',
+        name: 'endDate',
+        message: 'End date (YYYY-MM-DD):',
+        validate: (input: string) => {
+          if (!input) return true; // Optional
+          const dt = DateTime.fromISO(input);
+          return dt.isValid || 'Please enter a valid date in YYYY-MM-DD format';
+        }
+      }
+    ]);
+    startDate = dateRange.startDate;
+    endDate = dateRange.endDate;
+  } else if (dateOption !== 'all') {
+    days = dateOption;
+  }
+
+  // Ask about additional filters
+  const { useFilters } = await inquirer.prompt([
+    {
+      type: 'confirm',
+      name: 'useFilters',
+      message: 'Add additional filters (subject/body keywords)?',
+      default: false
+    }
+  ]);
+
+  let subject, body;
+  if (useFilters) {
+    const filters = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'subject',
+        message: 'Subject keywords (optional):'
+      },
+      {
+        type: 'input',
+        name: 'body',
+        message: 'Body content keywords (optional):'
+      }
+    ]);
+    subject = filters.subject;
+    body = filters.body;
+  }
+
+  // Ask about options
+  const options = await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'limit',
+      message: 'Maximum number of emails to process:',
+      default: '50',
+      validate: (input: string) => {
+        const num = parseInt(input, 10);
+        return (!isNaN(num) && num > 0 && num <= 500) || 'Please enter a number between 1 and 500';
+      }
+    },
+    {
+      type: 'confirm',
+      name: 'includeAttachments',
+      message: 'Include attachment information?',
+      default: false
+    },
+    {
+      type: 'autocomplete',
+      name: 'model',
+      message: 'AI model for analysis:',
+      source: async (_answers: any, input: string) => {
+        const choices = [
+          { name: 'Claude Haiku (fast, basic)', value: 'haiku' },
+          { name: 'Claude Sonnet (balanced)', value: 'sonnet' },
+          { name: 'Claude Opus (thorough)', value: 'opus' }
+        ];
+        if (!input) return choices;
+        const searchTerm = input.toLowerCase();
+        return choices.filter(choice => 
+          choice.name.toLowerCase().includes(searchTerm)
+        );
+      },
+      default: 'haiku'
+    },
+    {
+      type: 'confirm',
+      name: 'showReferences',
+      message: 'Show email references after analysis?',
+      default: true
+    }
+  ]);
+
+  // Ask about export
+  const { shouldExport } = await inquirer.prompt([
+    {
+      type: 'confirm',
+      name: 'shouldExport',
+      message: 'Export results to file?',
+      default: false
+    }
+  ]);
+
+  let exportFile;
+  if (shouldExport) {
+    const { format } = await inquirer.prompt([
+      {
+        type: 'autocomplete',
+        name: 'format',
+        message: 'Export format:',
+        source: async (_answers: any, input: string) => {
+          const choices = [
+            { name: 'Markdown (.md)', value: 'md' },
+            { name: 'JSON (.json)', value: 'json' }
+          ];
+          if (!input) return choices;
+          const searchTerm = input.toLowerCase();
+          return choices.filter(choice => 
+            choice.name.toLowerCase().includes(searchTerm)
+          );
+        },
+        default: 'md'
+      }
+    ]);
+
+    const defaultFilename = `email_search_${email.split('@')[0]}_${DateTime.now().toFormat('yyyy-MM-dd')}.${format}`;
+    const { filename } = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'filename',
+        message: 'Export filename:',
+        default: defaultFilename
+      }
+    ]);
+    exportFile = filename;
+  }
+
+  return {
+    email,
+    query,
+    days,
+    startDate,
+    endDate,
+    subject,
+    body,
+    limit: options.limit,
+    includeAttachments: options.includeAttachments,
+    model: options.model,
+    showReferences: options.showReferences,
+    export: exportFile
+  };
+}
+
 program
   .name('wizard')
   .description('Interactive CLI wizard to help build toolbox commands')
@@ -1133,6 +1388,7 @@ program
         { name: 'Bitbucket - Interact with Bitbucket repositories', value: 'bitbucket' },
         { name: 'Run SQL - Execute SQL scripts with variable substitution', value: 'run-sql' },
         { name: 'Track Day - Summarize daily activities from Slack, Gmail, and Calendar', value: 'track-day' },
+        { name: 'Search Email - Search and analyze Gmail conversations with AI', value: 'search-email' },
         { name: 'Cache Management - Manage the toolbox cache', value: 'cache' },
       ];
 
@@ -1179,6 +1435,9 @@ program
           break;
         case 'track-day':
           answers = await promptTrackDay();
+          break;
+        case 'search-email':
+          answers = await promptSearchEmail();
           break;
         default:
           logger.error('Unknown command');
