@@ -22,8 +22,9 @@ program
   .option('-d, --date <date>', 'Date to track (YYYY-MM-DD format, defaults to yesterday)')
   .option('-o, --output <file>', 'Output CSV file (defaults to activity_YYYY-MM-DD.csv)')
   .option('--slack-token <token>', 'Slack API token (or set SLACK_API_TOKEN env var)')
-  .option('--google-creds <path>', 'Path to Google credentials JSON file')
-  .option('--google-token <path>', 'Path to store Google OAuth token')
+  .option('--account <emailOrAlias>', 'Gmail account to use (email or alias)')
+  .option('--google-creds <path>', 'Path to Google credentials JSON file (deprecated)')
+  .option('--google-token <path>', 'Path to store Google OAuth token (deprecated)')
   .option('--timezone <tz>', 'Timezone for activity times (defaults to system timezone)')
   .option('--workday-start <time>', 'Workday start time in HH:mm format', '08:00')
   .option('--workday-end <time>', 'Workday end time in HH:mm format', '18:00')
@@ -100,14 +101,15 @@ program
 
       // Initialize Google Auth if needed
       let googleAuth: GoogleAuthManager | null = null;
-      if ((options.gmail !== false || options.calendar !== false) && config.googleCredentialsPath) {
+      if (options.gmail !== false || options.calendar !== false) {
         // Stop spinner for auth process
         spinner.stop();
         
         try {
           googleAuth = new GoogleAuthManager(
             config.googleCredentialsPath,
-            config.googleTokenPath
+            config.googleTokenPath,
+            options.account
           );
           await googleAuth.authenticate();
           spinner.start('Continuing activity tracking...');

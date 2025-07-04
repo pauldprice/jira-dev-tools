@@ -64,6 +64,7 @@ toolbox search-email --email vendor@supplier.com --query "What are the payment t
 
 - `-e, --email <address>` - Email address to search for (required)
 - `-q, --query <query>` - Natural language query to answer (required)
+- `--account <emailOrAlias>` - Gmail account to use (email or alias)
 - `-d, --days <number>` - Search emails from last N days
 - `--start-date <date>` - Start date (YYYY-MM-DD)
 - `--end-date <date>` - End date (YYYY-MM-DD)
@@ -122,9 +123,35 @@ toolbox wizard
 # Follow the prompts
 ```
 
+## Using Multiple Gmail Accounts
+
+### With a specific account
+
+```bash
+# Use email address
+toolbox search-email --account work@company.com --email client@business.com --query "project timeline"
+
+# Or use alias
+toolbox search-email --account work --email client@business.com --query "project timeline"
+```
+
+### Managing accounts
+
+```bash
+# List available accounts
+toolbox gmail-accounts list
+
+# Add a new account
+toolbox gmail-accounts add --alias personal
+
+# Set default account
+toolbox gmail-accounts set-default work
+```
+
 ## Notes
 
-- Requires Gmail authentication (uses same auth as track-day tool)
+- Supports multiple Gmail accounts (see `toolbox gmail-accounts --help`)
+- If no account is specified, uses the default account
 - The AI will analyze the email content and answer based on what it finds
 - References to specific emails include date and subject for verification
 - Export files preserve the full analysis and email details

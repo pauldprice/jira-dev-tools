@@ -192,6 +192,9 @@ function buildCommand(commandId: string, answers: any): string {
       
     case 'search-email':
       parts.push('search-email');
+      if (answers.account) {
+        parts.push('--account', escapeShellArg(answers.account));
+      }
       parts.push('--email', escapeShellArg(answers.email));
       parts.push('--query', escapeShellArg(answers.query));
       
@@ -226,6 +229,21 @@ function buildCommand(commandId: string, answers: any): string {
       }
       if (answers.export) {
         parts.push('--export', escapeShellArg(answers.export));
+      }
+      break;
+      
+    case 'gmail-accounts':
+      parts.push('gmail-accounts', answers.operation);
+      
+      if (answers.operation === 'add') {
+        if (answers.alias) {
+          parts.push('--alias', escapeShellArg(answers.alias));
+        }
+        if (answers.default) {
+          parts.push('--default');
+        }
+      } else if (answers.emailOrAlias) {
+        parts.push(escapeShellArg(answers.emailOrAlias));
       }
       break;
   }
@@ -1166,7 +1184,80 @@ async function promptTrackDay() {
 }
 
 async function promptSearchEmail() {
-  // Get email address
+  // Check available Gmail accounts
+  const { GmailAuthManager } = await import('../utils/gmail-auth-manager');
+  const authManager = GmailAuthManager.getInstance();
+  const accounts = await authManager.listAccounts();
+  
+  let selectedAccount;
+  if (accounts.length === 0) {
+    logger.warn('No Gmail accounts configured.');
+    const { addAccount } = await inquirer.prompt([
+      {
+        type: 'confirm',
+        name: 'addAccount',
+        message: 'Would you like to add a Gmail account now?',
+        default: true
+      }
+    ]);
+    
+    if (addAccount) {
+      // Execute the add account command
+      execSync('./toolbox gmail-accounts add', { stdio: 'inherit' });
+      // Re-fetch accounts
+      const updatedAccounts = await authManager.listAccounts();
+      if (updatedAccounts.length > 0) {
+        selectedAccount = updatedAccounts[0].email;
+      } else {
+        logger.error('Failed to add Gmail account');
+        process.exit(1);
+      }
+    } else {
+      logger.error('Gmail account required for email search');
+      process.exit(1);
+    }
+  } else if (accounts.length === 1) {
+    // Only one account, use it automatically
+    selectedAccount = accounts[0].email;
+    logger.info(`Using Gmail account: ${selectedAccount}`);
+  } else {
+    // Multiple accounts, let user choose
+    const accountChoices = accounts.map(acc => ({
+      name: `${acc.email}${acc.alias ? ` (${acc.alias})` : ''}${acc.isDefault ? ' [DEFAULT]' : ''}`,
+      value: acc.email
+    }));
+    
+    accountChoices.push({
+      name: '+ Add new Gmail account',
+      value: '__add_new__'
+    });
+    
+    const { account } = await inquirer.prompt([
+      {
+        type: 'autocomplete',
+        name: 'account',
+        message: 'Select Gmail account:',
+        source: async (_answers: any, input: string) => {
+          if (!input) return accountChoices;
+          const searchTerm = input.toLowerCase();
+          return accountChoices.filter(choice => 
+            choice.name.toLowerCase().includes(searchTerm)
+          );
+        },
+        default: accounts.find(acc => acc.isDefault)?.email || accounts[0].email
+      }
+    ]);
+    
+    if (account === '__add_new__') {
+      execSync('./toolbox gmail-accounts add', { stdio: 'inherit' });
+      // Re-run the prompt
+      return promptSearchEmail();
+    }
+    
+    selectedAccount = account;
+  }
+
+  // Get email address and query
   const { email, query } = await inquirer.prompt([
     {
       type: 'input',
@@ -1356,6 +1447,7 @@ async function promptSearchEmail() {
   }
 
   return {
+    account: selectedAccount,
     email,
     query,
     days,
@@ -1369,6 +1461,95 @@ async function promptSearchEmail() {
     showReferences: options.showReferences,
     export: exportFile
   };
+}
+
+async function promptGmailAccounts() {
+  // Ask what operation to perform
+  const { operation } = await inquirer.prompt([
+    {
+      type: 'autocomplete',
+      name: 'operation',
+      message: 'What would you like to do?',
+      source: async (_answers: any, input: string) => {
+        const choices = [
+          { name: 'List all Gmail accounts', value: 'list' },
+          { name: 'Add a new Gmail account', value: 'add' },
+          { name: 'Remove a Gmail account', value: 'remove' },
+          { name: 'Set default Gmail account', value: 'set-default' },
+          { name: 'Test Gmail account connection', value: 'test' }
+        ];
+        if (!input) return choices;
+        const searchTerm = input.toLowerCase();
+        return choices.filter(choice => 
+          choice.name.toLowerCase().includes(searchTerm)
+        );
+      },
+      default: 'list'
+    }
+  ]);
+
+  const answers: any = { operation };
+
+  // Get additional info based on operation
+  switch (operation) {
+    case 'add':
+      const addOptions = await inquirer.prompt([
+        {
+          type: 'input',
+          name: 'alias',
+          message: 'Account alias (optional, e.g., "work" or "personal"):'
+        },
+        {
+          type: 'confirm',
+          name: 'setDefault',
+          message: 'Set as default account?',
+          default: false
+        }
+      ]);
+      if (addOptions.alias) answers.alias = addOptions.alias;
+      if (addOptions.setDefault) answers.default = true;
+      break;
+
+    case 'remove':
+    case 'set-default':
+    case 'test':
+      // For these operations, we need to select an account
+      const { GmailAuthManager } = await import('../utils/gmail-auth-manager');
+      const authManager = GmailAuthManager.getInstance();
+      const accounts = await authManager.listAccounts();
+      
+      if (accounts.length === 0) {
+        logger.warn('No Gmail accounts configured.');
+        logger.info('Please add an account first.');
+        process.exit(1);
+      }
+
+      const accountChoices = accounts.map(acc => ({
+        name: `${acc.email}${acc.alias ? ` (${acc.alias})` : ''}${acc.isDefault ? ' [DEFAULT]' : ''}`,
+        value: acc.email
+      }));
+
+      const { emailOrAlias } = await inquirer.prompt([
+        {
+          type: 'autocomplete',
+          name: 'emailOrAlias',
+          message: operation === 'remove' ? 'Select account to remove:' :
+                   operation === 'set-default' ? 'Select account to set as default:' :
+                   'Select account to test:',
+          source: async (_answers: any, input: string) => {
+            if (!input) return accountChoices;
+            const searchTerm = input.toLowerCase();
+            return accountChoices.filter(choice => 
+              choice.name.toLowerCase().includes(searchTerm)
+            );
+          }
+        }
+      ]);
+      answers.emailOrAlias = emailOrAlias;
+      break;
+  }
+
+  return answers;
 }
 
 program
@@ -1389,6 +1570,7 @@ program
         { name: 'Run SQL - Execute SQL scripts with variable substitution', value: 'run-sql' },
         { name: 'Track Day - Summarize daily activities from Slack, Gmail, and Calendar', value: 'track-day' },
         { name: 'Search Email - Search and analyze Gmail conversations with AI', value: 'search-email' },
+        { name: 'Gmail Accounts - Manage Gmail accounts for email tools', value: 'gmail-accounts' },
         { name: 'Cache Management - Manage the toolbox cache', value: 'cache' },
       ];
 
@@ -1438,6 +1620,9 @@ program
           break;
         case 'search-email':
           answers = await promptSearchEmail();
+          break;
+        case 'gmail-accounts':
+          answers = await promptGmailAccounts();
           break;
         default:
           logger.error('Unknown command');

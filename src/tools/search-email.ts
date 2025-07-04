@@ -28,6 +28,7 @@ interface EmailMessage {
 interface SearchOptions {
   email: string;
   query: string;
+  account?: string;
   days?: number;
   startDate?: string;
   endDate?: string;
@@ -42,7 +43,7 @@ interface SearchOptions {
 }
 
 async function searchAndAnalyze(options: SearchOptions) {
-  const gmail = new GmailClient();
+  const gmail = new GmailClient(options.account);
   const apiKey = config.get('ANTHROPIC_API_KEY');
   const claude = new CachedClaudeClient(apiKey!, options.model || 'haiku');
 
@@ -281,6 +282,7 @@ program
   .description('Search Gmail for conversations with a specific contact and analyze with AI')
   .requiredOption('-e, --email <address>', 'Email address to search for (to/from)')
   .requiredOption('-q, --query <query>', 'Natural language query to answer')
+  .option('--account <emailOrAlias>', 'Gmail account to use (email or alias)')
   .option('-d, --days <number>', 'Search emails from last N days', parseInt)
   .option('--start-date <date>', 'Start date (YYYY-MM-DD)')
   .option('--end-date <date>', 'End date (YYYY-MM-DD)')

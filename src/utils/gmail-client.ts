@@ -1,5 +1,5 @@
 import { google, gmail_v1 } from 'googleapis';
-import { GoogleAuthManager } from './activity-tracker/google-auth';
+import { GmailAuthManager } from './gmail-auth-manager';
 import { logger } from './enhanced-logger';
 
 export interface EmailMessage {
@@ -29,15 +29,18 @@ export interface SearchOptions {
 
 export class GmailClient {
   private gmail?: gmail_v1.Gmail;
-  private authManager: GoogleAuthManager;
+  private authManager: GmailAuthManager;
   private userEmail?: string;
-  constructor() {
-    this.authManager = new GoogleAuthManager();
+  private accountEmail?: string;
+  
+  constructor(accountEmail?: string) {
+    this.authManager = GmailAuthManager.getInstance();
+    this.accountEmail = accountEmail;
   }
 
   async initialize(): Promise<void> {
     try {
-      const auth = await this.authManager.authenticate();
+      const auth = await this.authManager.authenticate(this.accountEmail);
       this.gmail = google.gmail({ version: 'v1', auth });
       
       // Get user's email address
