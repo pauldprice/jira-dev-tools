@@ -4,7 +4,7 @@ A collection of TypeScript-based development tools for automating common workflo
 
 ## Overview
 
-This toolbox provides a unified command-line interface for various development automation tools. All tools are written in TypeScript and executed using ts-node for rapid development and easy modification.
+This toolbox provides a unified command-line interface for various development automation tools. All tools are written in TypeScript and executed using pre-compiled JavaScript for optimal performance, with an optional development mode for debugging.
 
 ## Installation
 
@@ -32,6 +32,17 @@ Or if linked globally:
 
 ```bash
 toolbox <command> [options]
+```
+
+### Performance Mode (Default)
+```bash
+toolbox wizard              # Fast startup with compiled JS
+toolbox -n wizard          # Even faster with --no-check
+```
+
+### Development Mode
+```bash
+toolbox --dev wizard       # Full debugging with ts-node
 ```
 
 ## Available Tools

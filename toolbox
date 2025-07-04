@@ -18,15 +18,51 @@ MAGENTA='\033[0;35m'
 BOLD='\033[1m'
 NC='\033[0m' # No Color
 
-# Skip environment checks if TOOLBOX_SKIP_CHECKS is set or --no-check flag is passed
+# Check for development mode flags
+DEV_MODE=false
 SKIP_CHECKS=${TOOLBOX_SKIP_CHECKS:-false}
-if [[ "$1" == "--no-check" ]] || [[ "$1" == "-n" ]]; then
-    SKIP_CHECKS=true
-    shift
+
+# Parse initial flags
+for arg in "$@"; do
+    case $arg in
+        --dev|-D)
+            DEV_MODE=true
+            ;;
+        --no-check|-n)
+            SKIP_CHECKS=true
+            ;;
+    esac
+done
+
+# Remove the flags we've processed
+FILTERED_ARGS=()
+for arg in "$@"; do
+    case $arg in
+        --dev|-D|--no-check|-n)
+            # Skip these flags
+            ;;
+        *)
+            FILTERED_ARGS+=("$arg")
+            ;;
+    esac
+done
+
+# Check if dist directory exists and has recent builds
+DIST_EXISTS=false
+if [ -d "$SCRIPT_DIR/dist" ] && [ -f "$SCRIPT_DIR/dist/tools/wizard.js" ]; then
+    DIST_EXISTS=true
 fi
 
-# Environment checks
-if [ "$SKIP_CHECKS" != "true" ]; then
+# In production mode, check if we need to build
+if [ "$DEV_MODE" = "false" ] && [ "$DIST_EXISTS" = "false" ]; then
+    echo -e "${YELLOW}No compiled JavaScript found. Building toolbox...${NC}"
+    cd "$SCRIPT_DIR" && npm run build
+    echo -e "${GREEN}Build complete!${NC}"
+    echo ""
+fi
+
+# Environment checks (only in dev mode or if no dist)
+if [ "$SKIP_CHECKS" != "true" ] && ([ "$DEV_MODE" = "true" ] || [ "$DIST_EXISTS" = "false" ]); then
     echo -e "${BOLD}${BLUE}Checking environment...${NC}"
 else
     # Still need to check if node_modules exists even with skip checks
@@ -58,27 +94,37 @@ version_gte() {
     [ "$1" = "$(echo -e "$1\n$2" | sort -V | tail -n1)" ]
 }
 
-# Check if .nvmrc exists and matches current version
-if [ -f "$SCRIPT_DIR/.nvmrc" ]; then
-    NVMRC_VERSION=$(cat "$SCRIPT_DIR/.nvmrc")
-    if [ "$CURRENT_NODE_VERSION" != "$NVMRC_VERSION" ]; then
-        echo -e "${YELLOW}Warning: Node.js version mismatch${NC}"
-        echo -e "Current version: ${CURRENT_NODE_VERSION}"
-        echo -e "Required version: ${NVMRC_VERSION} (from .nvmrc)"
-        echo -e ""
-        echo -e "Please run: ${CYAN}nvm use${NC}"
-        echo -e ""
-        
-        # Check if at least meets minimum version
-        if ! version_gte "$CURRENT_NODE_VERSION" "$MIN_NODE_VERSION"; then
-            echo -e "${RED}Error: Node.js version ${CURRENT_NODE_VERSION} is below minimum required ${MIN_NODE_VERSION}${NC}"
-            exit 1
+# Only show version warnings in dev mode
+if [ "$DEV_MODE" = "true" ]; then
+    # Check if .nvmrc exists and matches current version
+    if [ -f "$SCRIPT_DIR/.nvmrc" ]; then
+        NVMRC_VERSION=$(cat "$SCRIPT_DIR/.nvmrc")
+        if [ "$CURRENT_NODE_VERSION" != "$NVMRC_VERSION" ]; then
+            echo -e "${YELLOW}Warning: Node.js version mismatch${NC}"
+            echo -e "Current version: ${CURRENT_NODE_VERSION}"
+            echo -e "Required version: ${NVMRC_VERSION} (from .nvmrc)"
+            echo -e ""
+            echo -e "Please run: ${CYAN}nvm use${NC}"
+            echo -e ""
+            
+            # Check if at least meets minimum version
+            if ! version_gte "$CURRENT_NODE_VERSION" "$MIN_NODE_VERSION"; then
+                echo -e "${RED}Error: Node.js version ${CURRENT_NODE_VERSION} is below minimum required ${MIN_NODE_VERSION}${NC}"
+                exit 1
+            fi
         fi
+    elif ! version_gte "$CURRENT_NODE_VERSION" "$MIN_NODE_VERSION"; then
+        echo -e "${RED}Error: Node.js version ${CURRENT_NODE_VERSION} is below minimum required ${MIN_NODE_VERSION}${NC}"
+        echo -e "Please install Node.js ${MIN_NODE_VERSION} or higher"
+        exit 1
     fi
-elif ! version_gte "$CURRENT_NODE_VERSION" "$MIN_NODE_VERSION"; then
-    echo -e "${RED}Error: Node.js version ${CURRENT_NODE_VERSION} is below minimum required ${MIN_NODE_VERSION}${NC}"
-    echo -e "Please install Node.js ${MIN_NODE_VERSION} or higher"
-    exit 1
+else
+    # In production mode, just check minimum version
+    if ! version_gte "$CURRENT_NODE_VERSION" "$MIN_NODE_VERSION"; then
+        echo -e "${RED}Error: Node.js version ${CURRENT_NODE_VERSION} is below minimum required ${MIN_NODE_VERSION}${NC}"
+        echo -e "Please install Node.js ${MIN_NODE_VERSION} or higher"
+        exit 1
+    fi
 fi
 
 # Check npm
@@ -87,14 +133,17 @@ if ! command -v npm &> /dev/null; then
     exit 1
 fi
 
-# Check TypeScript
-if [ ! -f "$SCRIPT_DIR/node_modules/.bin/tsc" ]; then
-    echo -e "${YELLOW}TypeScript not found in node_modules${NC}"
-fi
+# Dev mode specific checks
+if [ "$DEV_MODE" = "true" ]; then
+    # Check TypeScript
+    if [ ! -f "$SCRIPT_DIR/node_modules/.bin/tsc" ]; then
+        echo -e "${YELLOW}TypeScript not found in node_modules${NC}"
+    fi
 
-# Check ts-node
-if [ ! -f "$SCRIPT_DIR/node_modules/.bin/ts-node" ]; then
-    echo -e "${YELLOW}ts-node not found in node_modules${NC}"
+    # Check ts-node
+    if [ ! -f "$SCRIPT_DIR/node_modules/.bin/ts-node" ]; then
+        echo -e "${YELLOW}ts-node not found in node_modules${NC}"
+    fi
 fi
 
 # Check if node_modules exists
@@ -133,7 +182,9 @@ check_env_vars() {
 }
 
 # Run environment variable check but don't fail
-check_env_vars
+if [ "$DEV_MODE" = "true" ]; then
+    check_env_vars
+fi
 
 echo -e "${GREEN}✓ Environment checks passed${NC}"
 echo ""
@@ -145,9 +196,10 @@ usage() {
     echo -e "${BOLD}${BLUE}Gather Toolbox${NC}"
     echo ""
     echo -e "${BOLD}USAGE:${NC}"
-    echo "    toolbox [--no-check] <command> [options]"
+    echo "    toolbox [options] <command> [command-options]"
     echo ""
     echo -e "${BOLD}GLOBAL OPTIONS:${NC}"
+    echo -e "    ${CYAN}--dev, -D${NC}       Run in development mode (uses ts-node)"
     echo -e "    ${CYAN}--no-check, -n${NC}  Skip environment checks for faster startup"
     echo ""
     echo -e "${BOLD}COMMANDS:${NC}"
@@ -166,50 +218,103 @@ usage() {
     echo ""
     echo -e "${BOLD}EXAMPLES:${NC}"
     echo "    toolbox fetch-jira APP-1234"
+    echo "    toolbox --dev wizard  # Run wizard in development mode"
     echo "    toolbox release-notes --help"
-    echo "    toolbox release-notes --output notes.md"
     echo ""
     echo -e "Run '${CYAN}toolbox <command> --help${NC}' for more information on a specific command."
 }
 
 # Main command parsing
-COMMAND="${1:-wizard}"
-shift || true
+COMMAND="${FILTERED_ARGS[0]:-wizard}"
+
+# Remove the command from the filtered args
+COMMAND_ARGS=("${FILTERED_ARGS[@]:1}")
+
+# Set node options for production mode
+if [ "$DEV_MODE" = "false" ]; then
+    export NODE_ENV=production
+    # Disable source map support in production for faster startup
+    export NODE_OPTIONS="--no-enable-source-maps"
+fi
 
 # Remove the command from arguments to pass the rest to the tool
 case "$COMMAND" in
     fetch-jira|jira)
-        cd "$SCRIPT_DIR" && npx ts-node src/tools/fetch-jira-ticket.ts "$@"
+        if [ "$DEV_MODE" = "true" ]; then
+            cd "$SCRIPT_DIR" && npx ts-node src/tools/fetch-jira-ticket.ts "${COMMAND_ARGS[@]}"
+        else
+            cd "$SCRIPT_DIR" && node dist/tools/fetch-jira-ticket.js "${COMMAND_ARGS[@]}"
+        fi
         ;;
     fetch-attachment|attachment|attach)
-        cd "$SCRIPT_DIR" && npx ts-node src/tools/fetch-jira-attachment.ts "$@"
+        if [ "$DEV_MODE" = "true" ]; then
+            cd "$SCRIPT_DIR" && npx ts-node src/tools/fetch-jira-attachment.ts "${COMMAND_ARGS[@]}"
+        else
+            cd "$SCRIPT_DIR" && node dist/tools/fetch-jira-attachment.js "${COMMAND_ARGS[@]}"
+        fi
         ;;
     release-notes|release|notes)
-        cd "$SCRIPT_DIR" && npx ts-node src/tools/generate-release-notes.ts "$@"
+        if [ "$DEV_MODE" = "true" ]; then
+            cd "$SCRIPT_DIR" && npx ts-node src/tools/generate-release-notes.ts "${COMMAND_ARGS[@]}"
+        else
+            cd "$SCRIPT_DIR" && node dist/tools/generate-release-notes.js "${COMMAND_ARGS[@]}"
+        fi
         ;;
     analyze-pdf|pdf|analyze)
-        cd "$SCRIPT_DIR" && npx ts-node src/tools/analyze-pdf.ts "$@"
+        if [ "$DEV_MODE" = "true" ]; then
+            cd "$SCRIPT_DIR" && npx ts-node src/tools/analyze-pdf.ts "${COMMAND_ARGS[@]}"
+        else
+            cd "$SCRIPT_DIR" && node dist/tools/analyze-pdf.js "${COMMAND_ARGS[@]}"
+        fi
         ;;
     bitbucket|bb)
-        cd "$SCRIPT_DIR" && npx ts-node src/tools/bitbucket.ts "$@"
+        if [ "$DEV_MODE" = "true" ]; then
+            cd "$SCRIPT_DIR" && npx ts-node src/tools/bitbucket.ts "${COMMAND_ARGS[@]}"
+        else
+            cd "$SCRIPT_DIR" && node dist/tools/bitbucket.js "${COMMAND_ARGS[@]}"
+        fi
         ;;
     cache)
-        cd "$SCRIPT_DIR" && npx ts-node src/tools/cache-manager.ts "$@"
+        if [ "$DEV_MODE" = "true" ]; then
+            cd "$SCRIPT_DIR" && npx ts-node src/tools/cache-manager.ts "${COMMAND_ARGS[@]}"
+        else
+            cd "$SCRIPT_DIR" && node dist/tools/cache-manager.js "${COMMAND_ARGS[@]}"
+        fi
         ;;
     run-sql|sql)
-        cd "$SCRIPT_DIR" && npx ts-node src/tools/run-sql.ts "$@"
+        if [ "$DEV_MODE" = "true" ]; then
+            cd "$SCRIPT_DIR" && npx ts-node src/tools/run-sql.ts "${COMMAND_ARGS[@]}"
+        else
+            cd "$SCRIPT_DIR" && node dist/tools/run-sql.js "${COMMAND_ARGS[@]}"
+        fi
         ;;
     track-day|track)
-        cd "$SCRIPT_DIR" && npx ts-node src/tools/track-day.ts "$@"
+        if [ "$DEV_MODE" = "true" ]; then
+            cd "$SCRIPT_DIR" && npx ts-node src/tools/track-day.ts "${COMMAND_ARGS[@]}"
+        else
+            cd "$SCRIPT_DIR" && node dist/tools/track-day.js "${COMMAND_ARGS[@]}"
+        fi
         ;;
     search-email|email-search|email)
-        cd "$SCRIPT_DIR" && npx ts-node src/tools/search-email.ts "$@"
+        if [ "$DEV_MODE" = "true" ]; then
+            cd "$SCRIPT_DIR" && npx ts-node src/tools/search-email.ts "${COMMAND_ARGS[@]}"
+        else
+            cd "$SCRIPT_DIR" && node dist/tools/search-email.js "${COMMAND_ARGS[@]}"
+        fi
         ;;
     gmail-accounts|gmail|accounts)
-        cd "$SCRIPT_DIR" && npx ts-node src/tools/gmail-accounts.ts "$@"
+        if [ "$DEV_MODE" = "true" ]; then
+            cd "$SCRIPT_DIR" && npx ts-node src/tools/gmail-accounts.ts "${COMMAND_ARGS[@]}"
+        else
+            cd "$SCRIPT_DIR" && node dist/tools/gmail-accounts.js "${COMMAND_ARGS[@]}"
+        fi
         ;;
-    wizard)
-        cd "$SCRIPT_DIR" && npx ts-node src/tools/wizard.ts "$@"
+    wizard|w)
+        if [ "$DEV_MODE" = "true" ]; then
+            cd "$SCRIPT_DIR" && npx ts-node src/tools/wizard.ts "${COMMAND_ARGS[@]}"
+        else
+            cd "$SCRIPT_DIR" && node dist/tools/wizard.js "${COMMAND_ARGS[@]}"
+        fi
         ;;
     help|--help|-h)
         usage
