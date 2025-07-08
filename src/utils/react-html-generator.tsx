@@ -741,6 +741,7 @@ function getOptimizedStyles(version: string): string {
         font-weight: 700;
         font-size: 12pt;
         color: #2c3e50;
+        margin-right: 0.5em;
     }
     
     .category-icon {
