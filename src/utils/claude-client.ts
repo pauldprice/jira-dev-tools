@@ -87,9 +87,17 @@ Rules for testing notes:
 - Mention specific user flows or scenarios to verify
 - Reference specific features or components that were modified
 - Avoid generic advice like "test edge cases" or "check for regressions"
+- Write complete testing instructions in a single line, not as sub-bullets
+- If listing multiple items to test, include them all in one sentence
 
-Example good testing note: "Verify that the new florist ranking dropdown correctly saves and displays the selected order"
-Example bad testing note: "Test the feature thoroughly"`,
+Example good testing notes:
+- "Verify that the new florist ranking dropdown correctly saves and displays the selected order"
+- "Test product search with single words, multiple word phrases, and special characters"
+- "Check text spacing with long product names and multiple lines of text on different screen sizes"
+
+Example bad testing notes:
+- "Test the feature thoroughly"
+- "Test search with:" (incomplete - should specify what to search with)`,
         messages: [
           {
             role: 'user',
@@ -254,13 +262,55 @@ Do not include testing notes or risks in this summary.`;
           .filter(line => line.length > 0);
       }
       else if (section.toLowerCase().includes('testing')) {
-        analysis.testingNotes = lines
-          .filter(line => line.match(/^[-•*]\s+/) || line.match(/^\d+\.\s+/))
-          .map(line => line.replace(/^[-•*\d.]\s+/, '').trim())
-          .filter(line => !line.match(/^(\d+\.\s*)?(testing|testing notes|specific testing notes):/i))
-          .filter(line => !line.match(/^\d+\.\s*[A-Z\s]+:?$/)) // Remove section headers
-          .filter(line => !line.match(/^[A-Z\s]+:$/)) // Remove standalone headers
-          .filter(line => line.length > 0);
+        // Improved parsing for testing notes that handles sub-bullets
+        const testingNotes: string[] = [];
+        let currentNote = '';
+        let collectingSubItems = false;
+        
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          
+          // Skip headers
+          if (line.match(/^(\d+\.\s*)?(testing|testing notes|specific testing notes):/i) ||
+              line.match(/^#+\s+testing/i)) {
+            continue;
+          }
+          
+          // Main bullet point
+          if (line.match(/^[-•*]\s+/) || line.match(/^\d+\.\s+/)) {
+            // Save previous note if exists
+            if (currentNote.trim()) {
+              testingNotes.push(currentNote.trim());
+            }
+            
+            // Extract new note
+            currentNote = line.replace(/^[-•*\d.]\s+/, '').trim();
+            
+            // Check if this note expects sub-items
+            collectingSubItems = currentNote.endsWith(':');
+          }
+          // Sub-bullet (indented)
+          else if (collectingSubItems && line.match(/^\s+[•\-*]\s+/)) {
+            const subItem = line.trim().replace(/^[•\-*]\s+/, '');
+            if (currentNote.endsWith(':')) {
+              currentNote += ` ${subItem}`;
+            } else {
+              currentNote += `, ${subItem}`;
+            }
+          }
+        }
+        
+        // Don't forget the last note
+        if (currentNote.trim()) {
+          testingNotes.push(currentNote.trim());
+        }
+        
+        analysis.testingNotes = testingNotes
+          .filter(note => note.length > 0)
+          .map(note => {
+            // Clean up notes that end with colon but have content
+            return note.replace(/:\s*,/, ':').replace(/,\s*/, ', ');
+          });
       }
       else if (section.toLowerCase().includes('risk') || section.toLowerCase().includes('concern')) {
         analysis.risks = lines
