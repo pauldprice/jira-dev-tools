@@ -315,8 +315,41 @@ export async function promptPromptly(): Promise<{ [key: string]: any }> {
             answers.editor = editor;
           }
         }
+      } else if (action === 'delete') {
+        // For delete action, show a list of prompts
+        const { PromptManager: DelManager } = await import('../../../tools/promptly/prompt-store');
+        const delManager = new DelManager();
+        const delPrompts = delManager.list();
+        
+        if (delPrompts.length === 0) {
+          console.log('No prompts available to delete');
+          process.exit(0);
+        }
+        
+        const delPromptChoices = delPrompts.map(p => ({
+          name: `${p.name}${p.category ? ` (${p.category})` : ''} - ${p.description || 'No description'}`,
+          value: p.name
+        }));
+        
+        const { selectedPrompt } = await inquirer.prompt([
+          {
+            type: 'autocomplete',
+            name: 'selectedPrompt',
+            message: 'Select a prompt to delete (type to search):',
+            source: async (_answers: any, input: string) => {
+              if (!input) {
+                return delPromptChoices;
+              }
+              const searchTerm = input.toLowerCase();
+              return delPromptChoices.filter(choice => 
+                choice.name.toLowerCase().includes(searchTerm)
+              );
+            }
+          }
+        ]);
+        answers.name = selectedPrompt;
       } else {
-        // For other actions, just ask for the name
+        // For other actions (show, export), just ask for the name
         const { name } = await inquirer.prompt([
           {
             type: 'input',
@@ -329,15 +362,23 @@ export async function promptPromptly(): Promise<{ [key: string]: any }> {
       }
 
       if (action === 'delete') {
-        const { force } = await inquirer.prompt([
+        // Require user to type the prompt name to confirm deletion
+        await inquirer.prompt([
           {
-            type: 'confirm',
-            name: 'force',
-            message: 'Skip confirmation?',
-            default: false
+            type: 'input',
+            name: 'confirmName',
+            message: `Type "${answers.name}" to confirm deletion:`,
+            validate: (input) => {
+              if (input === answers.name) {
+                return true;
+              }
+              return `Please type "${answers.name}" exactly to confirm`;
+            }
           }
         ]);
-        answers.force = force;
+        
+        // If we get here, the user has confirmed
+        answers.force = true; // Skip the built-in confirmation since we did our own
       } else if (action === 'export') {
         const { output } = await inquirer.prompt([
           {
