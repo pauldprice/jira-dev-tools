@@ -23,6 +23,7 @@ export interface SavedPrompt {
   defaults: PromptDefaults;
   created: string;
   lastUsed?: string;
+  lastModified?: string;
   useCount: number;
 }
 

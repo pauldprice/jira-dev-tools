@@ -349,8 +349,12 @@ function buildPromptlyCommand(parts: string[], answers: any): string {
       break;
       
     case 'show':
+    case 'edit':
     case 'delete':
       parts.push(answers.name);
+      if (answers.action === 'edit' && answers.editor) {
+        parts.push('--editor', escapeShellArg(answers.editor));
+      }
       if (answers.action === 'delete' && answers.force) {
         parts.push('--force');
       }

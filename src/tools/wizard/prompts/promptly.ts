@@ -5,6 +5,7 @@ export async function promptPromptly(): Promise<{ [key: string]: any }> {
     { name: 'List saved prompts', value: 'list' },
     { name: 'Run a saved prompt', value: 'run' },
     { name: 'Save a new prompt', value: 'save' },
+    { name: 'Edit an existing prompt', value: 'edit' },
     { name: 'Show prompt details', value: 'show' },
     { name: 'Delete a prompt', value: 'delete' },
     { name: 'Export a prompt', value: 'export' },
@@ -189,17 +190,88 @@ export async function promptPromptly(): Promise<{ [key: string]: any }> {
       break;
 
     case 'show':
+    case 'edit':
     case 'delete':
     case 'export':
-      const { name } = await inquirer.prompt([
-        {
-          type: 'input',
-          name: 'name',
-          message: `Prompt name to ${action}:`,
-          validate: (input) => input.length > 0 || 'Prompt name is required'
+      // For edit action, let's make it easier by showing a list of prompts
+      if (action === 'edit') {
+        // Import PromptManager to get list of prompts
+        const { PromptManager } = await import('../../../tools/promptly/prompt-store');
+        const manager = new PromptManager();
+        const prompts = manager.list();
+        
+        if (prompts.length === 0) {
+          console.log('No prompts available to edit');
+          process.exit(0);
         }
-      ]);
-      answers.name = name;
+        
+        const promptChoices = prompts.map(p => ({
+          name: `${p.name}${p.category ? ` (${p.category})` : ''} - ${p.description || 'No description'}`,
+          value: p.name
+        }));
+        
+        const { selectedPrompt } = await inquirer.prompt([
+          {
+            type: 'list',
+            name: 'selectedPrompt',
+            message: 'Select a prompt to edit:',
+            choices: promptChoices
+          }
+        ]);
+        answers.name = selectedPrompt;
+        
+        // Ask if they want to use a specific editor
+        const { useCustomEditor } = await inquirer.prompt([
+          {
+            type: 'confirm',
+            name: 'useCustomEditor',
+            message: 'Use a specific editor? (default: $EDITOR or auto-detect)',
+            default: false
+          }
+        ]);
+        
+        if (useCustomEditor) {
+          const { editor } = await inquirer.prompt([
+            {
+              type: 'list',
+              name: 'editor',
+              message: 'Select editor:',
+              choices: [
+                { name: 'VS Code', value: 'code --wait' },
+                { name: 'Vim', value: 'vim' },
+                { name: 'Nano', value: 'nano' },
+                { name: 'Emacs', value: 'emacs' },
+                { name: 'Other (specify)', value: 'other' }
+              ]
+            }
+          ]);
+          
+          if (editor === 'other') {
+            const { customEditor } = await inquirer.prompt([
+              {
+                type: 'input',
+                name: 'customEditor',
+                message: 'Enter editor command:',
+                validate: (input) => input.length > 0 || 'Editor command is required'
+              }
+            ]);
+            answers.editor = customEditor;
+          } else {
+            answers.editor = editor;
+          }
+        }
+      } else {
+        // For other actions, just ask for the name
+        const { name } = await inquirer.prompt([
+          {
+            type: 'input',
+            name: 'name',
+            message: `Prompt name to ${action}:`,
+            validate: (input) => input.length > 0 || 'Prompt name is required'
+          }
+        ]);
+        answers.name = name;
+      }
 
       if (action === 'delete') {
         const { force } = await inquirer.prompt([

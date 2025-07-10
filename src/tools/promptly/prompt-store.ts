@@ -157,4 +157,29 @@ export class PromptManager {
     }
     this.save(prompt, true);
   }
+
+  update(name: string, updates: Partial<SavedPrompt>): void {
+    const existing = this.get(name);
+    if (!existing) {
+      throw new Error(`Prompt "${name}" not found`);
+    }
+
+    // Merge updates with existing prompt
+    const updated: SavedPrompt = {
+      ...existing,
+      ...updates,
+      name: existing.name, // Name cannot be changed via update
+      created: existing.created, // Preserve original creation date
+      lastModified: new Date().toISOString()
+    };
+
+    // Re-parse placeholders if prompt text changed
+    if (updates.prompt) {
+      const PlaceholderParser = require('./placeholder-parser').PlaceholderParser;
+      updated.placeholders = PlaceholderParser.parse(updates.prompt);
+    }
+
+    this.store.prompts[name] = updated;
+    this.saveStore();
+  }
 }

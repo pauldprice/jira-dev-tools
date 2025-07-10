@@ -6,6 +6,7 @@ import { PromptRunner } from './prompt-runner';
 import { PlaceholderParser } from './placeholder-parser';
 import { ClipboardManager } from './clipboard';
 import { PromptWizard } from './wizard';
+import { PromptEditor } from './editor';
 import { SavedPrompt, SaveOptions, RunOptions } from './types';
 import { logger } from '../../utils/logger';
 import { table } from 'table';
@@ -275,6 +276,9 @@ export function createPromptlyCommand(): Command {
         }
         
         console.log(chalk.cyan('Created:'), new Date(prompt.created).toLocaleString());
+        if (prompt.lastModified) {
+          console.log(chalk.cyan('Last modified:'), new Date(prompt.lastModified).toLocaleString());
+        }
         if (prompt.lastUsed) {
           console.log(chalk.cyan('Last used:'), new Date(prompt.lastUsed).toLocaleString());
           console.log(chalk.cyan('Use count:'), prompt.useCount);
@@ -307,6 +311,58 @@ export function createPromptlyCommand(): Command {
         }
         
         console.log(chalk.gray('─'.repeat(60)));
+      } catch (error: any) {
+        logger.error(error.message);
+        process.exit(1);
+      }
+    });
+
+  // Edit command
+  program
+    .command('edit <name>')
+    .description('Edit an existing prompt in your editor')
+    .option('--editor <editor>', 'Specify editor to use (default: $EDITOR or auto-detect)')
+    .action(async (name, options) => {
+      try {
+        const manager = new PromptManager();
+        const prompt = manager.get(name);
+        
+        if (!prompt) {
+          console.log(chalk.red(`Error: Prompt "${name}" not found`));
+          process.exit(1);
+        }
+
+        // Set custom editor if provided
+        if (options.editor) {
+          process.env.VISUAL = options.editor;
+        }
+
+        console.log(chalk.blue(`\n📝 Editing prompt: ${name}`));
+        
+        // Open in editor
+        const editedContent = await PromptEditor.edit(prompt);
+        const parsedContent = PromptEditor.parseEditedContent(editedContent);
+        
+        // Check if content changed
+        if (parsedContent === prompt.prompt) {
+          console.log(chalk.yellow('\nNo changes made'));
+          return;
+        }
+
+        // Update the prompt
+        manager.update(name, {
+          prompt: parsedContent
+        });
+
+        // Show what changed
+        const updatedPrompt = manager.get(name);
+        console.log(chalk.green(`\n✅ Prompt "${name}" updated`));
+        
+        // Show new placeholders
+        const placeholderNames = Object.keys(updatedPrompt!.placeholders);
+        if (placeholderNames.length > 0) {
+          console.log(chalk.gray(`Placeholders: ${placeholderNames.join(', ')}`));
+        }
       } catch (error: any) {
         logger.error(error.message);
         process.exit(1);
