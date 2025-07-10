@@ -88,7 +88,7 @@ export function createPromptlyCommand(): Command {
 
   // Save command
   program
-    .command('save <name>')
+    .command('save <name...>')
     .description('Save a new prompt')
     .option('-f, --from-file <file>', 'Read prompt from file')
     .option('-s, --from-string <string>', 'Provide prompt as string')
@@ -98,8 +98,11 @@ export function createPromptlyCommand(): Command {
     .option('--model <model>', 'Default AI model')
     .option('--system-prompt <prompt>', 'System prompt')
     .option('--force', 'Overwrite existing prompt')
-    .action(async (name, options: SaveOptions) => {
+    .action(async (nameArray, options: SaveOptions) => {
       try {
+        // Join the name array back into a single string
+        const name = nameArray.join(' ');
+        
         // Get prompt content
         let promptContent: string;
         
@@ -341,22 +344,88 @@ export function createPromptlyCommand(): Command {
         
         // Open in editor
         const editedContent = await PromptEditor.edit(prompt);
-        const parsedContent = PromptEditor.parseEditedContent(editedContent);
+        const { prompt: parsedPrompt, metadata } = PromptEditor.parseEditedContentWithMetadata(editedContent);
         
-        // Check if content changed
-        if (parsedContent === prompt.prompt) {
+        // Debug logging
+        if (process.env.DEBUG_PROMPTLY) {
+          console.log(chalk.gray('\nDebug info:'));
+          console.log(chalk.gray(`Original name: "${prompt.name}"`));
+          console.log(chalk.gray(`Parsed name: "${metadata.name}"`));
+          console.log(chalk.gray(`Original category: "${prompt.category}"`));
+          console.log(chalk.gray(`Parsed category: "${metadata.category}"`));
+          console.log(chalk.gray(`Original description: "${prompt.description}"`));
+          console.log(chalk.gray(`Parsed description: "${metadata.description}"`));
+          console.log(chalk.gray(`Content changed: ${parsedPrompt !== prompt.prompt}`));
+        }
+        
+        // Check if nothing changed
+        // For metadata, we need to handle empty strings as removal
+        const newName = metadata.name || prompt.name;
+        const nameChanged = newName !== prompt.name;
+        
+        const originalCategory = prompt.category || '';
+        const newCategory = metadata.category !== undefined ? metadata.category : originalCategory;
+        const categoryChanged = newCategory !== originalCategory;
+        
+        const originalDescription = prompt.description || '';
+        const newDescription = metadata.description !== undefined ? metadata.description : originalDescription;
+        const descriptionChanged = newDescription !== originalDescription;
+        
+        const contentChanged = parsedPrompt !== prompt.prompt;
+        
+        if (!contentChanged && !nameChanged && !categoryChanged && !descriptionChanged) {
           console.log(chalk.yellow('\nNo changes made'));
           return;
         }
 
+        // Build update object
+        const updates: Partial<SavedPrompt> & { newName?: string } = {
+          prompt: parsedPrompt
+        };
+        
+        // Only update metadata if it was changed
+        if (nameChanged) {
+          updates.newName = newName;
+        }
+        if (categoryChanged) {
+          updates.category = newCategory || undefined;
+        }
+        if (descriptionChanged) {
+          updates.description = newDescription || undefined;
+        }
+
         // Update the prompt
-        manager.update(name, {
-          prompt: parsedContent
-        });
+        try {
+          manager.update(name, updates);
+        } catch (error: any) {
+          if (error.message.includes('already exists')) {
+            console.log(chalk.red(`\n❌ Error: Prompt "${newName}" already exists`));
+            return;
+          }
+          throw error;
+        }
 
         // Show what changed
-        const updatedPrompt = manager.get(name);
-        console.log(chalk.green(`\n✅ Prompt "${name}" updated`));
+        const updatedPrompt = manager.get(newName);
+        if (nameChanged) {
+          console.log(chalk.green(`\n✅ Prompt renamed from "${name}" to "${newName}"`));
+        } else {
+          console.log(chalk.green(`\n✅ Prompt "${name}" updated`));
+        }
+        
+        // Show what was updated
+        if (contentChanged) {
+          console.log(chalk.gray('Content updated'));
+        }
+        if (nameChanged) {
+          console.log(chalk.gray(`Name updated: ${name} → ${newName}`));
+        }
+        if (categoryChanged) {
+          console.log(chalk.gray(`Category updated: ${originalCategory || '(none)'} → ${newCategory || '(none)'}`));
+        }
+        if (descriptionChanged) {
+          console.log(chalk.gray(`Description updated: ${originalDescription || '(none)'} → ${newDescription || '(none)'}`));
+        }
         
         // Show new placeholders
         const placeholderNames = Object.keys(updatedPrompt!.placeholders);

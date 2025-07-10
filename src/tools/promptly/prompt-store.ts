@@ -158,17 +158,24 @@ export class PromptManager {
     this.save(prompt, true);
   }
 
-  update(name: string, updates: Partial<SavedPrompt>): void {
+  update(name: string, updates: Partial<SavedPrompt> & { newName?: string }): void {
     const existing = this.get(name);
     if (!existing) {
       throw new Error(`Prompt "${name}" not found`);
+    }
+
+    const newName = updates.newName || name;
+    
+    // Check if renaming to an existing prompt
+    if (newName !== name && this.store.prompts[newName]) {
+      throw new Error(`Prompt "${newName}" already exists`);
     }
 
     // Merge updates with existing prompt
     const updated: SavedPrompt = {
       ...existing,
       ...updates,
-      name: existing.name, // Name cannot be changed via update
+      name: newName,
       created: existing.created, // Preserve original creation date
       lastModified: new Date().toISOString()
     };
@@ -179,7 +186,12 @@ export class PromptManager {
       updated.placeholders = PlaceholderParser.parse(updates.prompt);
     }
 
-    this.store.prompts[name] = updated;
+    // If renaming, delete the old entry
+    if (newName !== name) {
+      delete this.store.prompts[name];
+    }
+    
+    this.store.prompts[newName] = updated;
     this.saveStore();
   }
 }

@@ -1,4 +1,10 @@
 import * as inquirer from 'inquirer';
+import inquirerAutocompletePrompt from 'inquirer-autocomplete-prompt';
+
+// Register autocomplete if not already registered
+if (!inquirer.prompt.prompts.autocomplete) {
+  inquirer.registerPrompt('autocomplete', inquirerAutocompletePrompt);
+}
 
 export async function promptPromptly(): Promise<{ [key: string]: any }> {
   const actionChoices = [
@@ -14,10 +20,18 @@ export async function promptPromptly(): Promise<{ [key: string]: any }> {
 
   const { action } = await inquirer.prompt([
     {
-      type: 'list',
+      type: 'autocomplete',
       name: 'action',
-      message: 'What would you like to do?',
-      choices: actionChoices
+      message: 'What would you like to do? (type to search)',
+      source: async (_answers: any, input: string) => {
+        if (!input) {
+          return actionChoices;
+        }
+        const searchTerm = input.toLowerCase();
+        return actionChoices.filter(choice => 
+          choice.name.toLowerCase().includes(searchTerm)
+        );
+      }
     }
   ]);
 
@@ -47,12 +61,35 @@ export async function promptPromptly(): Promise<{ [key: string]: any }> {
       break;
 
     case 'run':
+      // Import PromptManager to get list of prompts for selection
+      const { PromptManager: RunPromptManager } = await import('../../../tools/promptly/prompt-store');
+      const runManager = new RunPromptManager();
+      const runPrompts = runManager.list();
+      
+      if (runPrompts.length === 0) {
+        console.log('No prompts available to run');
+        process.exit(0);
+      }
+      
+      const runPromptChoices = runPrompts.map(p => ({
+        name: `${p.name}${p.category ? ` (${p.category})` : ''} - ${p.description || 'No description'}`,
+        value: p.name
+      }));
+      
       const runOptions = await inquirer.prompt([
         {
-          type: 'input',
+          type: 'autocomplete',
           name: 'name',
-          message: 'Prompt name to run:',
-          validate: (input) => input.length > 0 || 'Prompt name is required'
+          message: 'Select a prompt to run (type to search):',
+          source: async (_answers: any, input: string) => {
+            if (!input) {
+              return runPromptChoices;
+            }
+            const searchTerm = input.toLowerCase();
+            return runPromptChoices.filter(choice => 
+              choice.name.toLowerCase().includes(searchTerm)
+            );
+          }
         },
         {
           type: 'list',
@@ -212,10 +249,18 @@ export async function promptPromptly(): Promise<{ [key: string]: any }> {
         
         const { selectedPrompt } = await inquirer.prompt([
           {
-            type: 'list',
+            type: 'autocomplete',
             name: 'selectedPrompt',
-            message: 'Select a prompt to edit:',
-            choices: promptChoices
+            message: 'Select a prompt to edit (type to search):',
+            source: async (_answers: any, input: string) => {
+              if (!input) {
+                return promptChoices;
+              }
+              const searchTerm = input.toLowerCase();
+              return promptChoices.filter(choice => 
+                choice.name.toLowerCase().includes(searchTerm)
+              );
+            }
           }
         ]);
         answers.name = selectedPrompt;
@@ -231,18 +276,28 @@ export async function promptPromptly(): Promise<{ [key: string]: any }> {
         ]);
         
         if (useCustomEditor) {
+          const editorChoices = [
+            { name: 'VS Code', value: 'code --wait' },
+            { name: 'Vim', value: 'vim' },
+            { name: 'Nano', value: 'nano' },
+            { name: 'Emacs', value: 'emacs' },
+            { name: 'Other (specify)', value: 'other' }
+          ];
+          
           const { editor } = await inquirer.prompt([
             {
-              type: 'list',
+              type: 'autocomplete',
               name: 'editor',
-              message: 'Select editor:',
-              choices: [
-                { name: 'VS Code', value: 'code --wait' },
-                { name: 'Vim', value: 'vim' },
-                { name: 'Nano', value: 'nano' },
-                { name: 'Emacs', value: 'emacs' },
-                { name: 'Other (specify)', value: 'other' }
-              ]
+              message: 'Select editor (type to search):',
+              source: async (_answers: any, input: string) => {
+                if (!input) {
+                  return editorChoices;
+                }
+                const searchTerm = input.toLowerCase();
+                return editorChoices.filter(choice => 
+                  choice.name.toLowerCase().includes(searchTerm)
+                );
+              }
             }
           ]);
           

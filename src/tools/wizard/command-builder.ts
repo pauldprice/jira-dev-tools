@@ -307,7 +307,7 @@ function buildPromptlyCommand(parts: string[], answers: any): string {
       break;
       
     case 'run':
-      parts.push(answers.name);
+      parts.push(escapeShellArg(answers.name));
       if (answers.contextFrom && answers.contextFrom !== 'clipboard') {
         parts.push('--context-from', answers.contextFrom);
       }
@@ -329,7 +329,7 @@ function buildPromptlyCommand(parts: string[], answers: any): string {
       break;
       
     case 'save':
-      parts.push(answers.name);
+      parts.push(escapeShellArg(answers.name));
       if (answers.fromClipboard) {
         parts.push('--from-clipboard');
       } else if (answers.fromFile) {
@@ -351,7 +351,7 @@ function buildPromptlyCommand(parts: string[], answers: any): string {
     case 'show':
     case 'edit':
     case 'delete':
-      parts.push(answers.name);
+      parts.push(escapeShellArg(answers.name));
       if (answers.action === 'edit' && answers.editor) {
         parts.push('--editor', escapeShellArg(answers.editor));
       }
@@ -361,7 +361,7 @@ function buildPromptlyCommand(parts: string[], answers: any): string {
       break;
       
     case 'export':
-      parts.push(answers.name);
+      parts.push(escapeShellArg(answers.name));
       if (answers.output) {
         parts.push('--output', escapeShellArg(answers.output));
       }
