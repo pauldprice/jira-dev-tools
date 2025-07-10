@@ -19,6 +19,10 @@ export class PromptRunner {
       // Get context based on source
       const context = await this.getContext(options);
       
+      if (!options.silent && context) {
+        console.log(chalk.gray(`Context loaded (${context.length} characters)`));
+      }
+      
       // Prepare values including context
       const values = {
         ...options.params,
