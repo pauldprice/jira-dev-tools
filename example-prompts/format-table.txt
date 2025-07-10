@@ -1,0 +1,10 @@
+Please take the following raw HTML table and convert it into a nicely formatted ${format:markdown} list that rearranges the columns as follows: ${columns:Ticket Number, Description, Status}.
+
+Requirements:
+- Extract data from the HTML table structure
+- Reorder columns to match the specified order
+- Format as a clean ${format} table/list
+- Handle any missing or malformed data gracefully
+- Remove any HTML tags and decode HTML entities
+
+${context}

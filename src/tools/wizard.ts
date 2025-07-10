@@ -15,7 +15,8 @@ import {
   promptRunSql,
   promptTrackDay,
   promptSearchEmail,
-  promptGmailAccounts
+  promptGmailAccounts,
+  promptPromptly
 } from './wizard/prompts';
 
 // Register the autocomplete prompt type
@@ -37,6 +38,7 @@ const commandChoices: CommandChoice[] = [
   { name: 'Track Day - Summarize daily activities from Slack, Gmail, and Calendar', value: 'track-day' },
   { name: 'Search Email - Search and analyze Gmail conversations with AI', value: 'search-email' },
   { name: 'Gmail Accounts - Manage Gmail accounts for email tools', value: 'gmail-accounts' },
+  { name: 'Promptly - Manage and run reusable AI prompts', value: 'promptly' },
   { name: 'Cache Management - Manage the toolbox cache', value: 'cache' },
 ];
 
@@ -60,6 +62,8 @@ async function getCommandAnswers(selectedCommand: string): Promise<any> {
       return promptSearchEmail();
     case 'gmail-accounts':
       return promptGmailAccounts();
+    case 'promptly':
+      return promptPromptly();
     default:
       throw new Error(`Unknown command: ${selectedCommand}`);
   }

@@ -60,7 +60,8 @@
     "puppeteer": "^24.10.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "simple-git": "^3.19.1"
+    "simple-git": "^3.19.1",
+    "table": "^6.9.0"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.3",

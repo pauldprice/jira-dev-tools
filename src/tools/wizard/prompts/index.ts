@@ -7,3 +7,4 @@ export { promptRunSql } from './run-sql';
 export { promptTrackDay } from './track-day';
 export { promptSearchEmail } from './search-email';
 export { promptGmailAccounts } from './gmail-accounts';
+export { promptPromptly } from './promptly';

@@ -41,6 +41,9 @@ export function buildCommand(commandId: string, answers: any): string {
     case 'manage-time':
       return buildManageTimeCommand(parts, answers);
       
+    case 'promptly':
+      return buildPromptlyCommand(parts, answers);
+      
     default:
       return parts.join(' ');
   }
@@ -282,6 +285,87 @@ function buildManageTimeCommand(parts: string[], answers: any): string {
     if (answers.format && answers.format !== 'table') {
       parts.push('--format', answers.format);
     }
+  }
+  
+  return parts.join(' ');
+}
+
+function buildPromptlyCommand(parts: string[], answers: any): string {
+  parts.push('promptly', answers.action);
+  
+  switch (answers.action) {
+    case 'list':
+      if (answers.category) {
+        parts.push('--category', escapeShellArg(answers.category));
+      }
+      if (answers.search) {
+        parts.push('--search', escapeShellArg(answers.search));
+      }
+      if (answers.verbose) {
+        parts.push('--verbose');
+      }
+      break;
+      
+    case 'run':
+      parts.push(answers.name);
+      if (answers.contextFrom && answers.contextFrom !== 'clipboard') {
+        parts.push('--context-from', answers.contextFrom);
+      }
+      if (answers.contextFile) {
+        parts.push('--context-file', escapeShellArg(answers.contextFile));
+      }
+      if (answers.outputTo && answers.outputTo !== 'stdout') {
+        parts.push('--output-to', answers.outputTo);
+      }
+      if (answers.outputFile) {
+        parts.push('--output-file', escapeShellArg(answers.outputFile));
+      }
+      if (answers.append) {
+        parts.push('--append');
+      }
+      if (answers.interactive) {
+        parts.push('--interactive');
+      }
+      break;
+      
+    case 'save':
+      parts.push(answers.name);
+      if (answers.fromClipboard) {
+        parts.push('--from-clipboard');
+      } else if (answers.fromFile) {
+        parts.push('--from-file', escapeShellArg(answers.fromFile));
+      } else if (answers.fromString) {
+        parts.push('--from-string', escapeShellArg(answers.fromString));
+      }
+      if (answers.category) {
+        parts.push('--category', escapeShellArg(answers.category));
+      }
+      if (answers.description) {
+        parts.push('--description', escapeShellArg(answers.description));
+      }
+      if (answers.force) {
+        parts.push('--force');
+      }
+      break;
+      
+    case 'show':
+    case 'delete':
+      parts.push(answers.name);
+      if (answers.action === 'delete' && answers.force) {
+        parts.push('--force');
+      }
+      break;
+      
+    case 'export':
+      parts.push(answers.name);
+      if (answers.output) {
+        parts.push('--output', escapeShellArg(answers.output));
+      }
+      break;
+      
+    case 'import':
+      parts.push(escapeShellArg(answers.file));
+      break;
   }
   
   return parts.join(' ');

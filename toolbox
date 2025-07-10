@@ -212,6 +212,7 @@ usage() {
     echo -e "    ${CYAN}track-day${NC}       Track daily activities from Slack, Gmail, and Calendar"
     echo -e "    ${CYAN}search-email${NC}    Search and analyze Gmail conversations with AI"
     echo -e "    ${CYAN}gmail-accounts${NC}  Manage Gmail accounts for email tools"
+    echo -e "    ${CYAN}promptly${NC}        Manage and run reusable AI prompts"
     echo -e "    ${CYAN}cache${NC}           Manage toolbox cache"
     echo -e "    ${CYAN}wizard${NC}          Launch interactive CLI command builder"
     echo -e "    ${CYAN}help${NC}            Show this help message"
@@ -307,6 +308,13 @@ case "$COMMAND" in
             cd "$SCRIPT_DIR" && npx ts-node src/tools/gmail-accounts.ts "${COMMAND_ARGS[@]}"
         else
             cd "$SCRIPT_DIR" && node dist/tools/gmail-accounts.js "${COMMAND_ARGS[@]}"
+        fi
+        ;;
+    promptly|prompt|p)
+        if [ "$DEV_MODE" = "true" ]; then
+            cd "$SCRIPT_DIR" && npx ts-node src/tools/promptly-cli.ts "${COMMAND_ARGS[@]}"
+        else
+            cd "$SCRIPT_DIR" && node dist/tools/promptly-cli.js "${COMMAND_ARGS[@]}"
         fi
         ;;
     wizard|w)
