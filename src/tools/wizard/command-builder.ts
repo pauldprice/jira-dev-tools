@@ -210,25 +210,59 @@ function buildTrackDayCommand(parts: string[], answers: any): string {
 function buildSearchEmailCommand(parts: string[], answers: any): string {
   parts.push('search-email');
   
+  // Add required email parameter
+  parts.push('-e', escapeShellArg(answers.email));
+  
+  // Add required query parameter
   parts.push('--query', escapeShellArg(answers.query));
   
-  if (answers.limit !== 10) {
+  // Add date range options
+  if (answers.days) {
+    parts.push('--days', answers.days.toString());
+  } else {
+    if (answers.startDate) {
+      parts.push('--start-date', answers.startDate);
+    }
+    if (answers.endDate) {
+      parts.push('--end-date', answers.endDate);
+    }
+  }
+  
+  // Add subject and body filters
+  if (answers.subject) {
+    parts.push('--subject', escapeShellArg(answers.subject));
+  }
+  if (answers.body) {
+    parts.push('--body', escapeShellArg(answers.body));
+  }
+  
+  // Add limit option
+  if (answers.limit) {
     parts.push('--limit', answers.limit.toString());
   }
   
-  if (answers.format !== 'text') {
-    parts.push('--format', answers.format);
+  // Add attachment option
+  if (answers.includeAttachments) {
+    parts.push('--include-attachments');
   }
   
-  if (answers.includeBody) {
-    parts.push('--include-body');
+  // Add model option
+  if (answers.model && answers.model !== 'haiku') {
+    parts.push('--model', answers.model);
   }
   
-  if (answers.labelFilter) {
-    parts.push('--label', escapeShellArg(answers.labelFilter));
+  // Add show references option
+  if (answers.showReferences) {
+    parts.push('--show-references');
   }
   
-  if (answers.account && answers.account !== 'default') {
+  // Add export option
+  if (answers.export) {
+    parts.push('--export', escapeShellArg(answers.export));
+  }
+  
+  // Add account option
+  if (answers.account) {
     parts.push('--account', answers.account);
   }
   
@@ -236,22 +270,19 @@ function buildSearchEmailCommand(parts: string[], answers: any): string {
 }
 
 function buildGmailAccountsCommand(parts: string[], answers: any): string {
-  parts.push('gmail-accounts', answers.action);
+  parts.push('gmail-accounts', answers.operation);
   
-  if (answers.action === 'add' && answers.alias) {
-    parts.push('--alias', answers.alias);
+  if (answers.operation === 'add') {
+    if (answers.alias) {
+      parts.push('--alias', escapeShellArg(answers.alias));
+    }
+    if (answers.default) {
+      parts.push('--default');
+    }
   }
   
-  if (answers.action === 'remove' && answers.accountToRemove) {
-    parts.push(answers.accountToRemove);
-  }
-  
-  if (answers.action === 'set-default' && answers.accountToSetDefault) {
-    parts.push(answers.accountToSetDefault);
-  }
-  
-  if (answers.action === 'test' && answers.accountToTest) {
-    parts.push(answers.accountToTest);
+  if ((answers.operation === 'remove' || answers.operation === 'set-default' || answers.operation === 'test') && answers.emailOrAlias) {
+    parts.push(answers.emailOrAlias);
   }
   
   return parts.join(' ');

@@ -81,6 +81,12 @@ async function searchAndAnalyze(options: SearchOptions) {
 
     const gmailQuery = searchParts.join(' ');
     logger.info(`Searching Gmail with query: ${gmailQuery}`);
+    
+    // Additional debug info
+    if (options.days) {
+      const calculatedDate = DateTime.now().minus({ days: options.days });
+      logger.debug(`Date calculation: Today is ${DateTime.now().toFormat('yyyy-MM-dd')}, ${options.days} days ago is ${calculatedDate.toFormat('yyyy-MM-dd')}`);
+    }
 
     // Debug logging
     logger.debug(`Options limit: ${options.limit}`);

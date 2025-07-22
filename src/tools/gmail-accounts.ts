@@ -75,8 +75,8 @@ program
       
       logger.success(`Successfully added Gmail account: ${email}`);
       process.exit(0);
-    } catch (error) {
-      logger.error('Failed to add account:', error);
+    } catch (error: any) {
+      logger.error('Failed to add account:', error.message || error);
       process.exit(1);
     }
   });

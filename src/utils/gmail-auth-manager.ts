@@ -281,6 +281,13 @@ export class GmailAuthManager {
   }
 
   private async createOAuth2Client(): Promise<OAuth2Client> {
+    // Check if credentials file exists
+    try {
+      await fs.access(this.credentialsPath);
+    } catch {
+      throw new Error(`Google credentials file not found at ${this.credentialsPath}. Please download OAuth credentials from Google Cloud Console and save them to this location.`);
+    }
+    
     // Load credentials
     const credentials = JSON.parse(await fs.readFile(this.credentialsPath, 'utf-8'));
     const credentialData = credentials.installed || credentials.web;
