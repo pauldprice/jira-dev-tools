@@ -85,7 +85,7 @@ Downloads attachments from Jira tickets, including images and documents.
 **Usage:**
 ```bash
 # Using attachment URL from fetch-jira output
-toolbox fetch-attachment "https://gatherly.atlassian.net/secure/attachment/53564/image-20250317-154038.png"
+toolbox fetch-attachment "https://company.atlassian.net/secure/attachment/53564/image-20250317-154038.png"
 
 # Using just the attachment ID
 toolbox fetch-attachment 53564

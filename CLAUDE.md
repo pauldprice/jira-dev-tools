@@ -39,7 +39,7 @@ Example JSON format:
   "JIRA_EMAIL": "your-email@example.com",
   "JIRA_API_TOKEN": "your-jira-api-token",
   "BITBUCKET_ACCESS_TOKEN": "your-bitbucket-access-token",
-  "DEFAULT_REPO_PATH": "/Users/paul/code/gather/webapp"
+  "DEFAULT_REPO_PATH": "/path/to/your/webapp"
 }
 ```
 
@@ -50,7 +50,7 @@ JIRA_BASE_URL=https://your-domain.atlassian.net
 JIRA_EMAIL=your-email@example.com
 JIRA_API_TOKEN=your-jira-api-token
 BITBUCKET_ACCESS_TOKEN=your-bitbucket-access-token
-DEFAULT_REPO_PATH=/Users/paul/code/gather/webapp
+DEFAULT_REPO_PATH=/path/to/your/webapp
 ```
 
 Note: Environment variables always take precedence over config files.

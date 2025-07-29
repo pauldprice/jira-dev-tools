@@ -65,10 +65,10 @@ Implemented automatic release version detection from JIRA tickets. The system no
 
 ```bash
 # Generate release notes with automatic version detection
-./toolbox release-notes --repo /Users/paul/code/gather/webapp --ai-model sonnet --pdf
+./toolbox release-notes --repo /path/to/your/webapp --ai-model sonnet --pdf
 
 # Override with specific version
-./toolbox release-notes --repo /Users/paul/code/gather/webapp --version V17.01.00 --ai-model sonnet --pdf
+./toolbox release-notes --repo /path/to/your/webapp --version V17.01.00 --ai-model sonnet --pdf
 ```
 
 ### Current Limitations

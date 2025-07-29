@@ -12,6 +12,7 @@ dist/
 .env
 .env.local
 .env.*.local
+*.local.*
 
 # IDE
 .vscode/
@@ -43,6 +44,9 @@ release_notes_*.html
 
 # Cache directory
 .toolbox_cache/
+
+# Claude local settings
+.claude/settings.local.json
 
 # Temporary files
 *.tmp
