@@ -56,6 +56,12 @@ export class ClaudeClient {
 
       return message.content[0].type === 'text' ? message.content[0].text : '';
     } catch (error: any) {
+      // Check for specific error types
+      if (error.status === 529 || error.message?.includes('overloaded')) {
+        logger.error(`Claude API overloaded (529): ${error.message}`);
+        throw new Error('Claude API is currently overloaded (529 error)');
+      }
+      
       logger.error(`Claude API error: ${error.message}`);
       throw new Error(`Failed to analyze: ${error.message}`);
     }

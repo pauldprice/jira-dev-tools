@@ -82,15 +82,21 @@ export async function promptSearchEmail() {
   }
 
   // Get email address and query
-  const { email, query } = await inquirer.prompt([
+  const { email, fromOnly, query } = await inquirer.prompt([
     {
       type: 'input',
       name: 'email',
-      message: 'Email address to search for (to/from):',
+      message: 'Email address to search for:',
       validate: (input: string) => {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         return emailRegex.test(input) || 'Please enter a valid email address';
       }
+    },
+    {
+      type: 'confirm',
+      name: 'fromOnly',
+      message: 'Only search emails FROM this address (not TO)?',
+      default: false
     },
     {
       type: 'input',
@@ -273,6 +279,7 @@ export async function promptSearchEmail() {
   return {
     account: selectedAccount,
     email,
+    fromOnly,
     query,
     days,
     startDate,

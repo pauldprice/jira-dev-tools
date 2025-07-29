@@ -8,6 +8,7 @@ import { ConfigLoader } from '../utils/config';
 import { DateTime } from 'luxon';
 import chalk from 'chalk';
 import * as fs from 'fs/promises';
+import ora from 'ora';
 
 const program = new Command();
 const config = ConfigLoader.getInstance();
@@ -40,6 +41,7 @@ interface SearchOptions {
   verbose?: boolean;
   showReferences?: boolean;
   export?: string;
+  fromOnly?: boolean;
 }
 
 async function searchAndAnalyze(options: SearchOptions) {
@@ -51,8 +53,12 @@ async function searchAndAnalyze(options: SearchOptions) {
     // Build Gmail search query
     const searchParts: string[] = [];
     
-    // Add email address search (both to and from)
-    searchParts.push(`(from:${options.email} OR to:${options.email})`);
+    // Add email address search
+    if (options.fromOnly) {
+      searchParts.push(`from:${options.email}`);
+    } else {
+      searchParts.push(`(from:${options.email} OR to:${options.email})`);
+    }
     
     // Add date range
     if (options.startDate || options.endDate || options.days) {
@@ -139,12 +145,67 @@ User Query: ${options.query}
 
 Please answer the query based on the email conversations above. If referencing specific emails, mention the date and subject.`;
 
-    // Get LLM response
-    logger.info('Analyzing emails with AI...');
-    const response = await claude.analyze(userPrompt, {
-      system: systemPrompt,
-      maxTokens: 2000
-    });
+    // Get LLM response with progress indication
+    const modelName = options.model || 'haiku';
+    const modelFullName = modelName === 'haiku' ? 'Claude Haiku' : 
+                          modelName === 'sonnet' ? 'Claude Sonnet' : 'Claude Opus';
+    
+    const spinner = ora({
+      text: `Analyzing emails with ${modelFullName}...`,
+      color: 'cyan'
+    }).start();
+    
+    // Add timeout handling
+    const timeoutMs = modelName === 'opus' ? 120000 : // 2 minutes for Opus
+                      modelName === 'sonnet' ? 60000 : // 1 minute for Sonnet
+                      30000; // 30 seconds for Haiku
+    
+    let response: string;
+    try {
+      const analysisPromise = claude.analyze(userPrompt, {
+        system: systemPrompt,
+        maxTokens: 2000
+      });
+      
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('AI analysis timeout')), timeoutMs);
+      });
+      
+      // Update spinner with progress
+      const progressInterval = setInterval(() => {
+        const elapsed = Date.now() - startTime;
+        const seconds = Math.floor(elapsed / 1000);
+        spinner.text = `Analyzing emails with ${modelFullName}... (${seconds}s)`;
+      }, 1000);
+      
+      const startTime = Date.now();
+      response = await Promise.race([analysisPromise, timeoutPromise]);
+      
+      clearInterval(progressInterval);
+      spinner.succeed(`Analysis completed in ${Math.floor((Date.now() - startTime) / 1000)}s`);
+      
+    } catch (error: any) {
+      spinner.fail('AI analysis failed');
+      
+      if (error.message === 'AI analysis timeout') {
+        logger.error(`\n${chalk.red('Timeout Error:')} AI analysis took too long (over ${timeoutMs / 1000}s).`);
+        logger.info(`\n${chalk.yellow('Suggestions:')}`);
+        logger.info(`  • Try using a faster model: ${chalk.cyan('--model haiku')}`);
+        logger.info(`  • Reduce the number of emails: ${chalk.cyan('--limit 30')}`);
+        logger.info(`  • The API might be overloaded - try again in a few minutes`);
+        process.exit(1);
+      } else if (error.message.includes('overloaded')) {
+        logger.error(`\n${chalk.red('API Overload Error:')} Claude's servers are currently overloaded.`);
+        logger.info(`\n${chalk.yellow('Suggestions:')}`);
+        logger.info(`  • Wait 5-30 minutes and try again`);
+        logger.info(`  • Use a different model: ${chalk.cyan('--model haiku')} or ${chalk.cyan('--model sonnet')}`);
+        logger.info(`  • Reduce the request size: ${chalk.cyan('--limit 30')}`);
+        process.exit(1);
+      } else {
+        logger.error(`\n${chalk.red('API Error:')} ${error.message}`);
+        process.exit(1);
+      }
+    }
 
     // Display results
     console.log(chalk.blue('\n═══════════════════════════════════════════════════════════════'));
@@ -286,7 +347,7 @@ async function exportResults(messages: EmailMessage[], analysis: string, options
 program
   .name('search-email')
   .description('Search Gmail for conversations with a specific contact and analyze with AI')
-  .requiredOption('-e, --email <address>', 'Email address to search for (to/from)')
+  .requiredOption('-e, --email <address>', 'Email address to search for')
   .requiredOption('-q, --query <query>', 'Natural language query to answer')
   .option('--account <emailOrAlias>', 'Gmail account to use (email or alias)')
   .option('-d, --days <number>', 'Search emails from last N days', parseInt)
@@ -299,6 +360,7 @@ program
   .option('-m, --model <model>', 'AI model to use (haiku, sonnet, opus)', 'haiku')
   .option('-r, --show-references', 'Show email references after analysis')
   .option('-x, --export <file>', 'Export results to file (.json or .md)')
+  .option('-f, --from-only', 'Only search emails FROM this address (not TO)')
   .option('-v, --verbose', 'Show detailed progress')
   .action(async (options) => {
     if (options.verbose) {

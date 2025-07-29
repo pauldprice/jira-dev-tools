@@ -74,7 +74,16 @@ export class CachedClaudeClient extends ClaudeClient {
     }
 
     // Make actual API call
-    const result = await super.analyze(prompt, options);
+    let result: string;
+    try {
+      result = await super.analyze(prompt, options);
+    } catch (error: any) {
+      // Re-throw with more context
+      if (error.message?.includes('529') || error.message?.includes('overloaded')) {
+        throw new Error('Claude API is currently overloaded (529 error)');
+      }
+      throw error;
+    }
 
     // Cache result
     if (cacheOpts.enabled !== false) {
