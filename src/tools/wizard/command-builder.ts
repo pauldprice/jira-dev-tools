@@ -26,6 +26,9 @@ export function buildCommand(commandId: string, answers: any): string {
     case 'bitbucket':
       return buildBitbucketCommand(parts, answers);
       
+    case 'review-prs':
+      return buildReviewPrsCommand(parts, answers);
+      
     case 'run-sql':
       return buildRunSqlCommand(parts, answers);
       
@@ -316,6 +319,36 @@ function buildManageTimeCommand(parts: string[], answers: any): string {
     if (answers.format && answers.format !== 'table') {
       parts.push('--format', answers.format);
     }
+  }
+  
+  return parts.join(' ');
+}
+
+function buildReviewPrsCommand(parts: string[], answers: any): string {
+  parts.push('review-prs');
+  
+  // Add repository option
+  if (answers.repoInfo) {
+    parts.push('--repo', `${answers.repoInfo.workspace}/${answers.repoInfo.slug}`);
+  } else if (answers.repoPath) {
+    parts.push('-d', escapeShellArg(answers.repoPath));
+  }
+  
+  // Add reviewer option
+  if (answers.reviewer) {
+    parts.push('--reviewer', escapeShellArg(answers.reviewer));
+  }
+  
+  // Add cache options
+  if (!answers.useCache) {
+    parts.push('--no-cache');
+  } else if (answers.cacheTtl && answers.cacheTtl !== '24') {
+    parts.push('--cache-ttl', answers.cacheTtl);
+  }
+  
+  // Add output format
+  if (answers.outputFormat === 'json') {
+    parts.push('--json');
   }
   
   return parts.join(' ');

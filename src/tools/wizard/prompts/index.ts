@@ -3,6 +3,7 @@ export { promptReleaseNotes } from './release-notes';
 export { promptAnalyzePdf } from './analyze-pdf';
 export { promptCache } from './cache';
 export { promptBitbucket } from './bitbucket';
+export { promptReviewPrs } from './review-prs';
 export { promptRunSql } from './run-sql';
 export { promptTrackDay } from './track-day';
 export { promptSearchEmail } from './search-email';

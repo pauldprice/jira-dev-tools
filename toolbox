@@ -49,16 +49,46 @@ done
 
 # Check if dist directory exists and has recent builds
 DIST_EXISTS=false
+BUILD_NEEDED=false
+
 if [ -d "$SCRIPT_DIR/dist" ] && [ -f "$SCRIPT_DIR/dist/tools/wizard.js" ]; then
     DIST_EXISTS=true
+    
+    # Check if source files are newer than build
+    if [ "$DEV_MODE" = "false" ] && [ "$SKIP_CHECKS" != "true" ]; then
+        # Find the newest source file
+        NEWEST_SRC=$(find "$SCRIPT_DIR/src" -name "*.ts" -type f -exec stat -f "%m %N" {} \; 2>/dev/null | sort -rn | head -1 | cut -d' ' -f1)
+        # Find the oldest dist file (to ensure all are newer than source)
+        OLDEST_DIST=$(find "$SCRIPT_DIR/dist" -name "*.js" -type f -exec stat -f "%m %N" {} \; 2>/dev/null | sort -n | head -1 | cut -d' ' -f1)
+        
+        # If we couldn't get timestamps, try GNU stat format
+        if [ -z "$NEWEST_SRC" ] || [ -z "$OLDEST_DIST" ]; then
+            NEWEST_SRC=$(find "$SCRIPT_DIR/src" -name "*.ts" -type f -exec stat -c "%Y %n" {} \; 2>/dev/null | sort -rn | head -1 | cut -d' ' -f1)
+            OLDEST_DIST=$(find "$SCRIPT_DIR/dist" -name "*.js" -type f -exec stat -c "%Y %n" {} \; 2>/dev/null | sort -n | head -1 | cut -d' ' -f1)
+        fi
+        
+        # Compare timestamps if we have them
+        if [ -n "$NEWEST_SRC" ] && [ -n "$OLDEST_DIST" ]; then
+            if [ "$NEWEST_SRC" -gt "$OLDEST_DIST" ]; then
+                BUILD_NEEDED=true
+            fi
+        fi
+    fi
 fi
 
 # In production mode, check if we need to build
-if [ "$DEV_MODE" = "false" ] && [ "$DIST_EXISTS" = "false" ]; then
-    echo -e "${YELLOW}No compiled JavaScript found. Building toolbox...${NC}"
-    cd "$SCRIPT_DIR" && npm run build
-    echo -e "${GREEN}Build complete!${NC}"
-    echo ""
+if [ "$DEV_MODE" = "false" ]; then
+    if [ "$DIST_EXISTS" = "false" ]; then
+        echo -e "${YELLOW}No compiled JavaScript found. Building toolbox...${NC}"
+        cd "$SCRIPT_DIR" && npm run build
+        echo -e "${GREEN}Build complete!${NC}"
+        echo ""
+    elif [ "$BUILD_NEEDED" = "true" ]; then
+        echo -e "${YELLOW}Source files have changed. Rebuilding toolbox...${NC}"
+        cd "$SCRIPT_DIR" && npm run build
+        echo -e "${GREEN}Build complete!${NC}"
+        echo ""
+    fi
 fi
 
 # Environment checks (only in dev mode or if no dist)
@@ -208,6 +238,7 @@ usage() {
     echo -e "    ${CYAN}release-notes${NC}   Generate HTML release notes from git commits"
     echo -e "    ${CYAN}analyze-pdf${NC}     Analyze PDF files using Claude's visual AI"
     echo -e "    ${CYAN}bitbucket${NC}       Interact with Bitbucket repositories"
+    echo -e "    ${CYAN}review-prs${NC}      Prioritize PRs for review by release date"
     echo -e "    ${CYAN}run-sql${NC}         Run SQL scripts with variable substitution"
     echo -e "    ${CYAN}track-day${NC}       Track daily activities from Slack, Gmail, and Calendar"
     echo -e "    ${CYAN}search-email${NC}    Search and analyze Gmail conversations with AI"
@@ -273,6 +304,13 @@ case "$COMMAND" in
             cd "$SCRIPT_DIR" && npx ts-node src/tools/bitbucket.ts "${COMMAND_ARGS[@]}"
         else
             cd "$SCRIPT_DIR" && node dist/tools/bitbucket.js "${COMMAND_ARGS[@]}"
+        fi
+        ;;
+    review-prs|review)
+        if [ "$DEV_MODE" = "true" ]; then
+            cd "$SCRIPT_DIR" && npx ts-node src/tools/review-prs.ts "${COMMAND_ARGS[@]}"
+        else
+            cd "$SCRIPT_DIR" && node dist/tools/review-prs.js "${COMMAND_ARGS[@]}"
         fi
         ;;
     cache)

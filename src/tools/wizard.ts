@@ -12,6 +12,7 @@ import {
   promptAnalyzePdf,
   promptCache,
   promptBitbucket,
+  promptReviewPrs,
   promptRunSql,
   promptTrackDay,
   promptSearchEmail,
@@ -34,6 +35,7 @@ const commandChoices: CommandChoice[] = [
   { name: 'Generate Release Notes - Generate release notes from git commits and JIRA tickets', value: 'release-notes' },
   { name: 'Analyze PDF - Analyze a PDF file using AI vision', value: 'analyze-pdf' },
   { name: 'Bitbucket - Interact with Bitbucket repositories', value: 'bitbucket' },
+  { name: 'Review PRs - Prioritize pull requests by release date', value: 'review-prs' },
   { name: 'Run SQL - Execute SQL scripts with variable substitution', value: 'run-sql' },
   { name: 'Track Day - Summarize daily activities from Slack, Gmail, and Calendar', value: 'track-day' },
   { name: 'Search Email - Search and analyze Gmail conversations with AI', value: 'search-email' },
@@ -52,6 +54,8 @@ async function getCommandAnswers(selectedCommand: string): Promise<any> {
       return promptAnalyzePdf();
     case 'bitbucket':
       return promptBitbucket();
+    case 'review-prs':
+      return promptReviewPrs();
     case 'cache':
       return promptCache();
     case 'run-sql':
