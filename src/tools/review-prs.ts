@@ -803,12 +803,12 @@ program
               logger.warn('Failed to fetch latest git refs. Results may not include recently merged tickets.');
             }
             
-            // Search for tickets with fix versions in the next 4 weeks
-            const jql = `project = APP AND fixVersion is not EMPTY AND fixVersion in unreleasedVersions() ORDER BY fixVersion ASC, priority DESC`;
+            // Search for tickets with fix versions in the next 4 weeks (excluding subtasks)
+            const jql = `project = APP AND issuetype != Sub-task AND fixVersion is not EMPTY AND fixVersion in unreleasedVersions() ORDER BY fixVersion ASC, priority DESC`;
             logger.debug(`JQL Query: ${jql}`);
             
             const searchResults = await searchJiraTickets(jql, jiraCredentials as JiraCredentials, {
-              fields: ['key', 'summary', 'status', 'fixVersions'],
+              fields: ['key', 'summary', 'status', 'fixVersions', 'issuetype'],
               maxResults: 200  // Limit to prevent timeout
             });
             
@@ -817,6 +817,13 @@ program
             for (const issue of searchResults || []) {
               // Skip if we already have a PR for this ticket
               if (ticketsWithPRs.has(issue.key)) continue;
+              
+              // Double-check to skip subtasks (in case of different naming)
+              const issueTypeName = issue.fields?.issuetype?.name?.toLowerCase() || '';
+              if (issueTypeName.includes('subtask') || issueTypeName.includes('sub-task')) {
+                logger.debug(`Skipping ${issue.key} - is a subtask`);
+                continue;
+              }
               
               // Skip if the ticket has already been merged to a main branch
               if (isTicketMerged(issue.key, repoDirectory)) {
