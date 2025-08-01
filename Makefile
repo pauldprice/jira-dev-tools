@@ -2,7 +2,7 @@
 
 # Default target
 help:
-	@echo "Gather Toolbox - Build Commands"
+	@echo "JIRA Dev Tools - Build Commands"
 	@echo ""
 	@echo "  make build      - Build for development (with source maps)"
 	@echo "  make build-prod - Build for production (optimized)"

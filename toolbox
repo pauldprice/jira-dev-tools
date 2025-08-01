@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Gather Toolbox - Main entry point for all TypeScript tools
+# JIRA Dev Tools - Main entry point for all TypeScript tools
 # This script provides a unified interface to run various development tools
 
 set -e
@@ -223,7 +223,7 @@ fi  # End of SKIP_CHECKS condition
 
 # Function to display usage
 usage() {
-    echo -e "${BOLD}${BLUE}Gather Toolbox${NC}"
+    echo -e "${BOLD}${BLUE}JIRA Dev Tools${NC}"
     echo ""
     echo -e "${BOLD}USAGE:${NC}"
     echo "    toolbox [options] <command> [command-options]"
