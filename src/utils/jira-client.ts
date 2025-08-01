@@ -275,6 +275,7 @@ export async function searchJiraTickets(
   );
 
   logger.debug(`Searching JIRA with JQL: ${jql}`);
+  logger.debug(`Fields: ${fields.join(',')}, maxResults: ${maxResults}`);
 
   try {
     const response = await client.get<{
