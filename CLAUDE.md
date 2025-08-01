@@ -1,10 +1,10 @@
-# Claude.md - Project Context for Toolbox
+# Claude.md - Project Context for JIRA Dev Tools
 
-This document provides essential context for Claude to understand and work effectively with the Gather Toolbox project.
+This document provides essential context for Claude to understand and work effectively with the JIRA Dev Tools project.
 
 ## Project Overview
 
-The Gather Toolbox is a TypeScript-based CLI utility collection for development workflows at Gather. It provides tools for interacting with Jira, generating release notes, and other development tasks.
+JIRA Dev Tools is a TypeScript-based CLI utility collection for development workflows. It provides tools for interacting with JIRA, reviewing Bitbucket pull requests, generating release notes, and other development automation tasks.
 
 ## Core Architecture
 
@@ -12,7 +12,7 @@ The Gather Toolbox is a TypeScript-based CLI utility collection for development 
 - **CLI Framework**: Commander.js for argument parsing
 - **Main Entry**: `toolbox` shell script that invokes individual tools via ts-node
 - **Structure**: Modular architecture with shared utilities in `src/utils/`
-- **Source Control**: Bitbucket (NOT GitHub) - no `gh` CLI available
+- **Source Control**: Supports both Bitbucket and GitHub repositories
 
 ## Configuration
 
@@ -39,7 +39,7 @@ Example JSON format:
   "JIRA_EMAIL": "your-email@example.com",
   "JIRA_API_TOKEN": "your-jira-api-token",
   "BITBUCKET_ACCESS_TOKEN": "your-bitbucket-access-token",
-  "DEFAULT_REPO_PATH": "/path/to/your/webapp"
+  "DEFAULT_REPO_PATH": "/path/to/your/repo"
 }
 ```
 
@@ -50,7 +50,7 @@ JIRA_BASE_URL=https://your-domain.atlassian.net
 JIRA_EMAIL=your-email@example.com
 JIRA_API_TOKEN=your-jira-api-token
 BITBUCKET_ACCESS_TOKEN=your-bitbucket-access-token
-DEFAULT_REPO_PATH=/path/to/your/webapp
+DEFAULT_REPO_PATH=/path/to/your/repo
 ```
 
 Note: Environment variables always take precedence over config files.
@@ -129,8 +129,8 @@ Note: Environment variables always take precedence over config files.
 - Isolate ticket-specific changes (don't include merged commits)
 - Handle both remote branches and local branches
 - Clean up temporary files after operations
-- Repository is hosted on Bitbucket - use git commands only, no GitHub CLI
-- Pull requests must be created through Bitbucket web interface
+- Supports repositories hosted on Bitbucket or GitHub
+- Pull requests can be created through the respective web interfaces or CLI tools
 
 ### API Integration
 - Use parallel processing for bulk operations

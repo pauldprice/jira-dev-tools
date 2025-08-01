@@ -1,5 +1,5 @@
 {
-  "name": "@gather/toolbox",
+  "name": "jira-dev-tools",
   "version": "1.0.0",
   "description": "A collection of TypeScript tools for development workflow automation",
   "main": "dist/index.js",
@@ -33,7 +33,7 @@
     "release-notes",
     "git"
   ],
-  "author": "",
+  "author": "Paul Price",
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.20.0",

@@ -1,6 +1,6 @@
-# Gather Toolbox
+# JIRA Dev Tools
 
-A collection of TypeScript-based development tools for automating common workflows, including Jira integration and release notes generation.
+A collection of TypeScript-based CLI tools for automating development workflows with JIRA integration, Bitbucket PR reviews, and release notes generation.
 
 ## Overview
 
@@ -11,7 +11,7 @@ This toolbox provides a unified command-line interface for various development a
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd toolbox
+cd jira-dev-tools
 
 # Install dependencies
 npm install
@@ -272,7 +272,7 @@ open attachments/*.png
 
 ```bash
 # From the toolbox directory, generate release notes for your webapp
-toolbox release-notes --repo ~/code/gather/webapp
+toolbox release-notes --repo ~/code/myproject
 
 # The tool will:
 # 1. Fetch commits between origin/master and origin/test
@@ -283,11 +283,11 @@ toolbox release-notes --repo ~/code/gather/webapp
 # 6. Generate formatted release notes
 
 # For a typical release workflow:
-cd ~/code/gather/toolbox
-toolbox release-notes --repo ../webapp --output ../webapp/RELEASE_NOTES.html
+cd ~/code/jira-dev-tools
+toolbox release-notes --repo ../myproject --output ../myproject/RELEASE_NOTES.html
 
 # Convert to PDF (using any HTML to PDF tool):
-# wkhtmltopdf ../webapp/RELEASE_NOTES.html ../webapp/RELEASE_NOTES.pdf
+# wkhtmltopdf ../myproject/RELEASE_NOTES.html ../myproject/RELEASE_NOTES.pdf
 # or open in browser and print to PDF
 ```
 
@@ -300,4 +300,4 @@ toolbox release-notes --repo ../webapp --output ../webapp/RELEASE_NOTES.html
 
 ## License
 
-[Your license here]
+MIT License - see LICENSE file for details
